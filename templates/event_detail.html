@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">🎮 事件详情</h2>
+                    
+                    <!-- 事件基本信息 -->
+                    <div class="mb-4">
+                        <h5>📋 基本信息</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>好友:</strong> {{ event.friend_name }}</p>
+                                <p><strong>世界:</strong> {{ event.world.world_name }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>开始时间:</strong> {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}</p>
+                                <p><strong>结束时间:</strong> {{ event.end_time.strftime('%Y-%m-%d %H:%M') }}</p>
+                                <p><strong>持续时间:</strong> {{ (event.duration // 3600) }}小时{{ (event.duration % 3600) // 60 }}分钟</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 世界标签 -->
+                    <div class="mb-4">
+                        <h5>🏷️ 世界标签</h5>
+                        <div class="d-flex flex-wrap">
+                            {% if event.world.tags %}
+                                {% for tag in event.world.tags.split(',') %}
+                                    <span class="badge bg-secondary tag">{{ tag.strip() }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">暂无标签</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- 自定义标签 -->
+                    <div class="mb-4">
+                        <h5>📌 自定义标签</h5>
+                        <div class="d-flex flex-wrap mb-2">
+                            {% if event.custom_tags %}
+                                {% for tag in event.custom_tags %}
+                                    <span class="badge bg-primary tag">{{ tag.tag_name }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">暂无自定义标签</span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- 添加标签表单 -->
+                        <form method="POST" action="{{ url_for('add_tag', event_id=event.id) }}" class="d-flex gap-2">
+                            <input type="text" name="tag_name" placeholder="添加自定义标签" class="form-control flex-grow-1">
+                            <button type="submit" class="btn btn-primary">添加</button>
+                        </form>
+                    </div>
+                    
+                    <!-- 备注信息 -->
+                    <div class="mb-4">
+                        <h5>📝 备注</h5>
+                        {% if event.notes %}
+                            <p>{{ event.notes }}</p>
+                        {% else %}
+                            <p class="text-muted">暂无备注</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- 点赞功能 -->
+                    <div class="mb-4">
+                        <h5>👍 点赞</h5>
+                        <button class="like-btn btn btn-outline-danger btn-lg" data-event-id="{{ event.id }}">
+                            👍 <span class="like-count">{{ event.likes or 0 }}</span>
+                        </button>
+                    </div>
+                    
+                    <!-- 返回按钮 -->
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">返回时间线</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <!-- 相关推荐或其他信息 -->
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5>📋 相关信息</h5>
+                    <p><strong>事件ID:</strong> {{ event.id }}</p>
+                    <p><strong>记录时间:</strong> {{ event.start_time.strftime('%Y-%m-%d') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <!-- 点赞功能脚本 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 点赞按钮事件监听
+            document.querySelectorAll('.like-btn').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const eventId = this.dataset.eventId;
+                    const likeCountSpan = this.querySelector('.like-count');
+                    
+                    try {
+                        const response = await fetch(`/api/event/${eventId}/like`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            likeCountSpan.textContent = data.likes;
+                        }
+                    } catch (error) {
+                        console.error('点赞失败:', error);
+                    }
+                });
+            });
+        });
+    </script>
+{% endblock %}

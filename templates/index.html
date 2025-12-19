@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1 class="mb-4">📅 共同房间事件时间线</h1>
+    
+    <div class="row">
+        {% if events %}
+            {% for event in events %}
+                <div class="col-lg-12">
+                    <div class="card event-card shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                🎮 与 {{ event.friend_name }} 在 {{ event.world.world_name }}
+                            </h5>
+                            <p class="card-text">
+                                ⏰ {{ event.start_time.strftime('%Y-%m-%d %H:%M') }} - {{ event.end_time.strftime('%H:%M') }} 
+                                ({{ (event.duration // 3600) }}小时{{ (event.duration % 3600) // 60 }}分钟)
+                            </p>
+                            
+                            <!-- 世界标签 -->
+                            <p class="card-text">
+                                🏷️ 标签:
+                                {% if event.world.tags %}
+                                    {% for tag in event.world.tags.split(',') %}
+                                        <span class="badge bg-secondary tag">{{ tag.strip() }}</span>
+                                    {% endfor %}
+                                {% endif %}
+                            </p>
+                            
+                            <!-- 自定义标签 -->
+                            {% if event.custom_tags %}
+                                <p class="card-text">
+                                    📌 自定义标签:
+                                    {% for tag in event.custom_tags %}
+                                        <span class="badge bg-primary tag">{{ tag.tag_name }}</span>
+                                    {% endfor %}
+                                </p>
+                            {% endif %}
+                            
+                            <!-- 操作按钮 -->
+                            <div class="d-flex gap-2">
+                                <a href="{{ url_for('event_detail', event_id=event.id) }}" class="btn btn-outline-primary btn-sm">
+                                    查看详情
+                                </a>
+                                <button class="like-btn btn btn-outline-danger btn-sm" data-event-id="{{ event.id }}">
+                                    👍 <span class="like-count">{{ event.likes or 0 }}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-lg-12">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center py-5">
+                        <h5 class="card-title">📭 暂无共同房间事件</h5>
+                        <p class="card-text">开始记录您的VRChat记忆吧！</p>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <!-- 点赞功能脚本 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 点赞按钮事件监听
+            document.querySelectorAll('.like-btn').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const eventId = this.dataset.eventId;
+                    const likeCountSpan = this.querySelector('.like-count');
+                    
+                    try {
+                        const response = await fetch(`/api/event/${eventId}/like`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            likeCountSpan.textContent = data.likes;
+                        }
+                    } catch (error) {
+                        console.error('点赞失败:', error);
+                    }
+                });
+            });
+        });
+    </script>
+{% endblock %}
