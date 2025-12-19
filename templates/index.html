@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <h1 class="mb-4">📅 共同房间事件时间线</h1>
+    <h1 class="mb-4">共同房间事件时间线</h1>
     
     <div class="row">
         {% if events %}
@@ -10,16 +10,16 @@
                     <div class="card event-card shadow-sm">
                         <div class="card-body">
                             <h5 class="card-title">
-                                🎮 与 {{ event.friend_name }} 在 {{ event.world.world_name }}
+                                与 {{ event.friend_name }} 在 {{ event.world.world_name }}
                             </h5>
                             <p class="card-text">
-                                ⏰ {{ event.start_time.strftime('%Y-%m-%d %H:%M') }} - {{ event.end_time.strftime('%H:%M') }} 
+                                {{ event.start_time.strftime('%Y-%m-%d %H:%M') }} - {{ event.end_time.strftime('%H:%M') }} 
                                 ({{ (event.duration // 3600) }}小时{{ (event.duration % 3600) // 60 }}分钟)
                             </p>
                             
                             <!-- 世界标签 -->
                             <p class="card-text">
-                                🏷️ 标签:
+                                标签:
                                 {% if event.world.tags %}
                                     {% for tag in event.world.tags.split(',') %}
                                         <span class="badge bg-secondary tag">{{ tag.strip() }}</span>
@@ -54,7 +54,7 @@
             <div class="col-lg-12">
                 <div class="card shadow-sm">
                     <div class="card-body text-center py-5">
-                        <h5 class="card-title">📭 暂无共同房间事件</h5>
+                        <h5 class="card-title">暂无共同房间事件</h5>
                         <p class="card-text">开始记录您的VRChat记忆吧！</p>
                     </div>
                 </div>

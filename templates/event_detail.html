@@ -5,11 +5,11 @@
         <div class="col-lg-8">
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <h2 class="card-title mb-4">🎮 事件详情</h2>
+                    <h2 class="card-title mb-4">事件详情</h2>
                     
                     <!-- 事件基本信息 -->
                     <div class="mb-4">
-                        <h5>📋 基本信息</h5>
+                        <h5>基本信息</h5>
                         <div class="row">
                             <div class="col-md-6">
                                 <p><strong>好友:</strong> {{ event.friend_name }}</p>
@@ -25,7 +25,7 @@
                     
                     <!-- 世界标签 -->
                     <div class="mb-4">
-                        <h5>🏷️ 世界标签</h5>
+                        <h5>世界标签</h5>
                         <div class="d-flex flex-wrap">
                             {% if event.world.tags %}
                                 {% for tag in event.world.tags.split(',') %}
@@ -39,7 +39,7 @@
                     
                     <!-- 自定义标签 -->
                     <div class="mb-4">
-                        <h5>📌 自定义标签</h5>
+                        <h5>自定义标签</h5>
                         <div class="d-flex flex-wrap mb-2">
                             {% if event.custom_tags %}
                                 {% for tag in event.custom_tags %}
