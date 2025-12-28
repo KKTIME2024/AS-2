@@ -1,102 +1,183 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <h1 class="mb-4">共同房间事件时间线</h1>
-    
-    <!-- 标签筛选 -->
-    <div class="mb-4">
-        <h5>🏷️ 按标签筛选</h5>
-        <div class="d-flex flex-wrap gap-2">
-            {% if selected_tag %}
-                <a href="{{ url_for('index') }}" class="btn btn-primary">
-                    📋 全部事件
-                </a>
-            {% else %}
-                <a href="{{ url_for('index') }}" class="btn btn-outline-primary active">
-                    📋 全部事件
-                </a>
-            {% endif %}
+    <header class="page-header" role="banner">
+        <h1 class="mb-4">共同房间事件时间线</h1>
+        <p class="lead text-muted">浏览您与好友在VRChat中的共享时刻</p>
+    </header>
+
+    <!-- 标签筛选区域 -->
+    <section class="tag-filter-section mb-4" role="region" aria-labelledby="filter-heading">
+        <h2 id="filter-heading" class="h5">🏷️ 按标签筛选</h2>
+        <div class="filter-controls" role="toolbar" aria-label="标签筛选工具">
+            <div class="d-flex flex-wrap gap-2" role="list" aria-label="筛选标签列表">
+                {% if selected_tag %}
+                    <a href="{{ url_for('index') }}" class="btn btn-primary" role="button" 
+                       aria-label="显示全部事件" aria-pressed="false">
+                        📋 全部事件
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-primary active" role="button" 
+                       aria-label="显示全部事件（当前选中）" aria-pressed="true">
+                        📋 全部事件
+                    </a>
+                {% endif %}
+                
+                {% if all_tags %}
+                    {% for tag in all_tags %}
+                        {% if selected_tag == tag %}
+                            <a href="{{ url_for('index', tag=tag) }}" class="btn btn-primary" role="button"
+                               aria-label="筛选标签：{{ tag }}（当前选中）" aria-pressed="true">
+                                {{ tag }}
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('index', tag=tag) }}" class="btn btn-outline-primary" role="button"
+                               aria-label="筛选标签：{{ tag }}" aria-pressed="false">
+                                {{ tag }}
+                            </a>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <span class="text-muted" aria-live="polite">暂无可用标签</span>
+                {% endif %}
+            </div>
             
-            {% if all_tags %}
-                {% for tag in all_tags %}
-                    {% if selected_tag == tag %}
-                        <a href="{{ url_for('index', tag=tag) }}" class="btn btn-primary">
-                            {{ tag }}
-                        </a>
-                    {% else %}
-                        <a href="{{ url_for('index', tag=tag) }}" class="btn btn-outline-primary">
-                            {{ tag }}
-                        </a>
-                    {% endif %}
-                {% endfor %}
-            {% else %}
-                <span class="text-muted">暂无可用标签</span>
+            {% if selected_tag %}
+                <div class="mt-2" role="status" aria-live="polite">
+                    <p class="text-muted">
+                        当前筛选结果: <strong>{{ selected_tag }}</strong>
+                    </p>
+                </div>
             {% endif %}
         </div>
+    </section>
+
+    <!-- 事件列表区域 -->
+    <section class="events-section" role="region" aria-labelledby="events-heading">
+        <h2 id="events-heading" class="visually-hidden">事件列表</h2>
         
-        {% if selected_tag %}
-            <p class="mt-2 text-muted">筛选结果: <strong>{{ selected_tag }}</strong></p>
-        {% endif %}
-    </div>
-    
-    <div class="row">
         {% if events %}
-            {% for event in events %}
-                <div class="col-lg-12">
-                    <div class="card event-card shadow-sm">
-                        <div class="card-body">
-                            <h5 class="card-title">
-                                与 {{ event.friend_name }} 在 {{ event.world.world_name }}
-                            </h5>
-                            <p class="card-text">
-                                {{ event.start_time.strftime('%Y-%m-%d %H:%M') }} - {{ event.end_time.strftime('%H:%M') }} 
-                                ({{ (event.duration // 3600) }}小时{{ (event.duration % 3600) // 60 }}分钟)
-                            </p>
-                            
-                            <!-- 世界标签 -->
-                            <p class="card-text">
-                                标签:
-                                {% if event.world.tags %}
-                                    {% for tag in event.world.tags.split(',') %}
-                                        <span class="badge bg-secondary tag">{{ tag.strip() }}</span>
-                                    {% endfor %}
-                                {% endif %}
-                            </p>
-                            
-                            <!-- 自定义标签 -->
-                            {% if event.custom_tags %}
-                                <p class="card-text">
-                                    📌 自定义标签:
-                                    {% for tag in event.custom_tags %}
-                                        <span class="badge bg-primary tag">{{ tag.tag_name }}</span>
-                                    {% endfor %}
-                                </p>
-                            {% endif %}
-                            
-                            <!-- 操作按钮 -->
-                            <div class="d-flex gap-2">
-                                <a href="{{ url_for('event_detail', event_id=event.id) }}" class="btn btn-outline-primary btn-sm">
-                                    查看详情
+            <div class="row" role="list" aria-label="共同房间事件列表">
+                {% for event in events %}
+                    <div class="col-lg-12" role="listitem">
+                        <article class="card event-card shadow-sm">
+                            <div class="card-body">
+                                <header class="card-header">
+                                    <h3 class="card-title h5">
+                                        与 <span class="friend-name">{{ event.friend_name }}</span> 
+                                        在 <span class="world-name">{{ event.world.world_name }}</span>
+                                    </h3>
+                                </header>
+                                
+                                <div class="card-content">
+                                    <p class="card-text event-time">
+                                        <time datetime="{{ event.start_time.isoformat() }}">
+                                            {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                                        </time>
+                                        -
+                                        <time datetime="{{ event.end_time.isoformat() }}">
+                                            {{ event.end_time.strftime('%H:%M') }}
+                                        </time>
+                                        <span class="duration">
+                                            ({{ (event.duration // 3600) }}小时{{ (event.duration % 3600) // 60 }}分钟)
+                                        </span>
+                                    </p>
+                                    
+                                    <!-- 世界标签 -->
+                                    {% if event.world.tags %}
+                                        <div class="world-tags mb-2">
+                                            <span class="visually-hidden">世界标签：</span>
+                                            {% for tag in event.world.tags.split(',') %}
+                                                <span class="badge bg-secondary tag" aria-label="世界标签：{{ tag.strip() }}">
+                                                    {{ tag.strip() }}
+                                                </span>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <!-- 自定义标签 -->
+                                    {% if event.custom_tags %}
+                                        <div class="custom-tags mb-2">
+                                            <span class="visually-hidden">自定义标签：</span>
+                                            {% for tag in event.custom_tags %}
+                                                <span class="badge bg-primary tag" aria-label="自定义标签：{{ tag.tag_name }}">
+                                                    {{ tag.tag_name }}
+                                                </span>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <footer class="card-footer bg-transparent border-0 pt-3">
+                                    <div class="d-flex gap-2" role="group" aria-label="事件操作">
+                                        <a href="{{ url_for('event_detail', event_id=event.id) }}" 
+                                           class="btn btn-outline-primary btn-sm"
+                                           aria-label="查看事件 {{ event.friend_name }} 在 {{ event.world.world_name }} 的详细信息">
+                                            查看详情
+                                        </a>
+                                        <button class="like-btn btn btn-outline-danger btn-sm" 
+                                                data-event-id="{{ event.id }}"
+                                                aria-label="为事件点赞，当前点赞数：{{ event.likes or 0 }}"
+                                                aria-live="polite">
+                                            👍 <span class="like-count">{{ event.likes or 0 }}</span>
+                                        </button>
+                                    </div>
+                                </footer>
+                            </div>
+                        </article>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <!-- 空状态 -->
+            <div class="empty-state" role="status" aria-live="polite">
+                <div class="empty-state-icon" aria-hidden="true">
+                    🎮
+                </div>
+                <h3 class="empty-state-title">暂无共同房间事件</h3>
+                <p class="empty-state-description">还没有记录任何VRChat记忆，开始创建您的第一个事件吧！与好友在VRChat中的美好时刻值得永久珍藏。</p>
+                
+                <div class="empty-state-actions">
+                    {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('create_event') }}" class="btn btn-primary btn-lg"
+                           aria-label="创建第一个事件">
+                            ➕ 创建第一个事件
+                        </a>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-lg"
+                           aria-label="刷新页面">
+                            🔄 刷新
+                        </a>
+                    {% else %}
+                        <div class="auth-prompts">
+                            <p class="empty-state-secondary">请先登录或注册以开始记录您的VRChat回忆</p>
+                            <div class="empty-state-actions">
+                                <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg"
+                                   aria-label="登录账户">
+                                    🔑 登录账户
                                 </a>
-                                <button class="like-btn btn btn-outline-danger btn-sm" data-event-id="{{ event.id }}">
-                                    👍 <span class="like-count">{{ event.likes or 0 }}</span>
-                                </button>
+                                <a href="{{ url_for('register') }}" class="btn btn-outline-primary btn-lg"
+                                   aria-label="注册新账户">
+                                    📝 注册新账户
+                                </a>
                             </div>
                         </div>
-                    </div>
+                    {% endif %}
                 </div>
-            {% endfor %}
-        {% else %}
-            <div class="col-lg-12">
-                <div class="card shadow-sm">
-                    <div class="card-body text-center py-5">
-                        <h5 class="card-title">暂无共同房间事件</h5>
-                        <p class="card-text">开始记录您的VRChat记忆吧！</p>
+                
+                {% if not current_user.is_authenticated %}
+                    <div class="empty-state-secondary mt-3">
+                        <p>注册后您可以：</p>
+                        <ul class="list-unstyled">
+                            <li>• 记录与好友的VRChat时刻</li>
+                            <li>• 添加自定义标签进行分类</li>
+                            <li>• 查看完整的时间线记录</li>
+                            <li>• 为喜欢的事件点赞</li>
+                        </ul>
                     </div>
-                </div>
+                {% endif %}
             </div>
         {% endif %}
-    </div>
+    </section>
 {% endblock %}
 
 {% block scripts %}

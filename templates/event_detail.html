@@ -1,113 +1,240 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <div class="row">
-        <div class="col-lg-8">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h2 class="card-title mb-4">事件详情</h2>
-                    
-                    <!-- 事件基本信息 -->
-                    <div class="mb-4">
-                        <h5>基本信息</h5>
+    <article class="event-detail" role="article" aria-label="事件详情">
+        <header class="page-header mb-4" role="banner">
+            <h1 class="mb-2">事件详情</h1>
+            <nav aria-label="面包屑导航" class="breadcrumb-nav">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">时间线</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">
+                        与 {{ event.friend_name }} 在 {{ event.world.world_name }}
+                    </li>
+                </ol>
+            </nav>
+        </header>
+
+        <div class="row">
+            <!-- 主要事件内容 -->
+            <div class="col-lg-8">
+                <section class="card shadow-sm mb-4" role="region" aria-labelledby="basic-info-heading">
+                    <div class="card-body">
+                        <h2 id="basic-info-heading" class="card-title h4 mb-4">基本信息</h2>
+                        
                         <div class="row">
                             <div class="col-md-6">
-                                <p><strong>好友:</strong> {{ event.friend_name }}</p>
-                                <p><strong>世界:</strong> {{ event.world.world_name }}</p>
+                                <dl class="row">
+                                    <dt class="col-sm-4 text-muted">好友:</dt>
+                                    <dd class="col-sm-8">{{ event.friend_name }}</dd>
+                                    
+                                    <dt class="col-sm-4 text-muted">世界:</dt>
+                                    <dd class="col-sm-8">{{ event.world.world_name }}</dd>
+                                </dl>
                             </div>
                             <div class="col-md-6">
-                                <p><strong>开始时间:</strong> {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}</p>
-                                <p><strong>结束时间:</strong> {{ event.end_time.strftime('%Y-%m-%d %H:%M') }}</p>
-                                <p><strong>持续时间:</strong> {{ (event.duration // 3600) }}小时{{ (event.duration % 3600) // 60 }}分钟</p>
+                                <dl class="row">
+                                    <dt class="col-sm-4 text-muted">开始时间:</dt>
+                                    <dd class="col-sm-8">
+                                        <time datetime="{{ event.start_time.isoformat() }}">
+                                            {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                                        </time>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-4 text-muted">结束时间:</dt>
+                                    <dd class="col-sm-8">
+                                        <time datetime="{{ event.end_time.isoformat() }}">
+                                            {{ event.end_time.strftime('%Y-%m-%d %H:%M') }}
+                                        </time>
+                                    </dd>
+                                    
+                                    <dt class="col-sm-4 text-muted">持续时间:</dt>
+                                    <dd class="col-sm-8">
+                                        {{ (event.duration // 3600) }}小时{{ (event.duration % 3600) // 60 }}分钟
+                                    </dd>
+                                </dl>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- 世界标签 -->
-                    <div class="mb-4">
-                        <h5>世界标签</h5>
-                        <div class="d-flex flex-wrap">
+                </section>
+
+                <!-- 世界标签 -->
+                <section class="card shadow-sm mb-4" role="region" aria-labelledby="world-tags-heading">
+                    <div class="card-body">
+                        <h2 id="world-tags-heading" class="card-title h5 mb-3">世界标签</h2>
+                        <div class="d-flex flex-wrap gap-2" role="list" aria-label="世界标签列表">
                             {% if event.world.tags %}
                                 {% for tag in event.world.tags.split(',') %}
-                                    <span class="badge bg-secondary tag">{{ tag.strip() }}</span>
+                                    <span class="badge bg-secondary tag" role="listitem"
+                                          aria-label="世界标签：{{ tag.strip() }}">
+                                        {{ tag.strip() }}
+                                    </span>
                                 {% endfor %}
                             {% else %}
-                                <span class="text-muted">暂无标签</span>
+                                <span class="text-muted" aria-live="polite">暂无世界标签</span>
                             {% endif %}
                         </div>
                     </div>
-                    
-                    <!-- 自定义标签 -->
-                    <div class="mb-4">
-                        <h5>自定义标签</h5>
-                        <div class="d-flex flex-wrap mb-2">
+                </section>
+
+                <!-- 自定义标签 -->
+                <section class="card shadow-sm mb-4" role="region" aria-labelledby="custom-tags-heading">
+                    <div class="card-body">
+                        <h2 id="custom-tags-heading" class="card-title h5 mb-3">自定义标签</h2>
+                        
+                        <div class="d-flex flex-wrap gap-2 mb-3" role="list" aria-label="自定义标签列表">
                             {% if event.custom_tags %}
                                 {% for tag in event.custom_tags %}
-                                    <span class="badge bg-primary tag">{{ tag.tag_name }}</span>
+                                    <span class="badge bg-primary tag" role="listitem"
+                                          aria-label="自定义标签：{{ tag.tag_name }}">
+                                        {{ tag.tag_name }}
+                                    </span>
                                 {% endfor %}
                             {% else %}
-                                <span class="text-muted">暂无自定义标签</span>
+                                <span class="text-muted" aria-live="polite">暂无自定义标签</span>
                             {% endif %}
                         </div>
                         
                         <!-- 添加标签表单 -->
-                        <form method="POST" action="{{ url_for('add_tag', event_id=event.id) }}" class="d-flex gap-2">
-                            <input type="text" name="tag_name" placeholder="添加自定义标签" class="form-control flex-grow-1">
-                            <button type="submit" class="btn btn-primary">添加</button>
+                        <form method="POST" action="{{ url_for('add_tag', event_id=event.id) }}" 
+                              class="d-flex gap-2" role="form" aria-label="添加自定义标签">
+                            <div class="flex-grow-1">
+                                <label for="tag-input" class="visually-hidden">新标签名称</label>
+                                <input type="text" id="tag-input" name="tag_name" 
+                                       class="form-control" 
+                                       placeholder="输入新标签名称"
+                                       aria-describedby="tag-help"
+                                       maxlength="50"
+                                       autocomplete="off">
+                                <small id="tag-help" class="form-text text-muted">
+                                    请输入不超过50个字符的标签名称
+                                </small>
+                            </div>
+                            <button type="submit" class="btn btn-primary" aria-label="添加标签">
+                                添加
+                            </button>
                         </form>
                     </div>
-                    
-                    <!-- 备注信息 -->
-                    <div class="mb-4">
-                        <h5>📝 备注</h5>
-                        <form method="POST" action="{{ url_for('update_notes', event_id=event.id) }}">
+                </section>
+
+                <!-- 备注信息 -->
+                <section class="card shadow-sm mb-4" role="region" aria-labelledby="notes-heading">
+                    <div class="card-body">
+                        <h2 id="notes-heading" class="card-title h5 mb-3">📝 备注</h2>
+                        
+                        <form method="POST" action="{{ url_for('update_notes', event_id=event.id) }}" 
+                              role="form" aria-label="编辑备注">
                             <div class="mb-3">
-                                <textarea name="notes" rows="4" class="form-control" placeholder="添加或编辑备注">{{ event.notes or '' }}</textarea>
+                                <label for="notes-textarea" class="form-label visually-hidden">事件备注</label>
+                                <textarea id="notes-textarea" name="notes" rows="4" 
+                                          class="form-control" 
+                                          placeholder="添加或编辑关于此事件的备注"
+                                          aria-describedby="notes-help"
+                                          autocomplete="off">{{ event.notes or '' }}</textarea>
+                                <small id="notes-help" class="form-text text-muted">
+                                    您可以在此记录关于此事件的任何额外信息
+                                </small>
                             </div>
-                            <button type="submit" class="btn btn-primary">保存备注</button>
+                            <button type="submit" class="btn btn-primary" aria-label="保存备注">
+                                保存备注
+                            </button>
                         </form>
+                        
                         {% if event.notes %}
-                            <p class="mt-3 text-muted">当前备注: {{ event.notes }}</p>
+                            <div class="mt-3" role="status" aria-live="polite">
+                                <p class="text-muted">
+                                    <strong>当前备注:</strong> {{ event.notes }}
+                                </p>
+                            </div>
                         {% endif %}
                     </div>
-                    
-                    <!-- 点赞功能 -->
-                    <div class="mb-4">
-                        <h5>👍 点赞</h5>
-                        <button class="like-btn btn btn-outline-danger btn-lg" data-event-id="{{ event.id }}">
+                </section>
+
+                <!-- 点赞功能 -->
+                <section class="card shadow-sm mb-4" role="region" aria-labelledby="likes-heading">
+                    <div class="card-body">
+                        <h2 id="likes-heading" class="card-title h5 mb-3">👍 点赞</h2>
+                        <button class="like-btn btn btn-outline-danger btn-lg" 
+                                data-event-id="{{ event.id }}"
+                                aria-label="为事件点赞，当前点赞数：{{ event.likes or 0 }}"
+                                aria-live="polite">
                             👍 <span class="like-count">{{ event.likes or 0 }}</span>
                         </button>
+                        <p class="text-muted mt-2 small">
+                            点击按钮表达您对此事件的喜爱
+                        </p>
                     </div>
-                    
-                    <!-- 事件管理按钮 -->
-                    <div class="d-flex gap-2 mt-4">
-                        <a href="{{ url_for('edit_event', event_id=event.id) }}" class="btn btn-primary">
+                </section>
+
+                <!-- 事件管理按钮 -->
+                <section class="event-actions mt-4" role="region" aria-labelledby="actions-heading">
+                    <h2 id="actions-heading" class="visually-hidden">事件管理操作</h2>
+                    <div class="d-flex gap-2" role="toolbar" aria-label="事件操作工具栏">
+                        <a href="{{ url_for('edit_event', event_id=event.id) }}" 
+                           class="btn btn-primary" role="button"
+                           aria-label="编辑此事件">
                             ✏️ 编辑事件
                         </a>
-                        <form method="POST" action="{{ url_for('delete_event', event_id=event.id) }}" onsubmit="return confirm('确定要删除这个事件吗？此操作不可恢复。');">
-                            <button type="submit" class="btn btn-danger">
+                        <form method="POST" action="{{ url_for('delete_event', event_id=event.id) }}" 
+                              onsubmit="return confirm('确定要删除这个事件吗？此操作不可恢复。');">
+                            <button type="submit" class="btn btn-danger" role="button"
+                                    aria-label="删除此事件（此操作不可恢复）">
                                 🗑️ 删除事件
                             </button>
                         </form>
-                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary ms-auto">
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary ms-auto" role="button"
+                           aria-label="返回时间线列表">
                             ↩️ 返回时间线
                         </a>
                     </div>
-                </div>
+                </section>
             </div>
-        </div>
-        
-        <div class="col-lg-4">
-            <!-- 相关推荐或其他信息 -->
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h5>📋 相关信息</h5>
-                    <p><strong>事件ID:</strong> {{ event.id }}</p>
-                    <p><strong>记录时间:</strong> {{ event.start_time.strftime('%Y-%m-%d') }}</p>
+            
+            <!-- 侧边栏信息 -->
+            <aside class="col-lg-4" role="complementary" aria-label="事件相关信息">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <h3 class="card-title h5 mb-3">📋 事件信息</h3>
+                        <dl class="row">
+                            <dt class="col-sm-5 text-muted">事件ID:</dt>
+                            <dd class="col-sm-7">
+                                <code>{{ event.id }}</code>
+                            </dd>
+                            
+                            <dt class="col-sm-5 text-muted">记录日期:</dt>
+                            <dd class="col-sm-7">
+                                <time datetime="{{ event.start_time.isoformat() }}">
+                                    {{ event.start_time.strftime('%Y-%m-%d') }}
+                                </time>
+                            </dd>
+                            
+                            <dt class="col-sm-5 text-muted">创建者:</dt>
+                            <dd class="col-sm-7">{{ event.user.username }}</dd>
+                            
+                            <dt class="col-sm-5 text-muted">最后更新:</dt>
+                            <dd class="col-sm-7">
+                                <time datetime="{{ event.start_time.isoformat() }}">
+                                    {{ event.start_time.strftime('%Y-%m-%d %H:%M') }}
+                                </time>
+                            </dd>
+                        </dl>
+                    </div>
                 </div>
-            </div>
+                
+                <!-- 快速操作提示 -->
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h3 class="card-title h5 mb-3">💡 快速操作提示</h3>
+                        <ul class="list-unstyled small">
+                            <li class="mb-2">• 使用标签可以帮助您更好地分类和组织事件</li>
+                            <li class="mb-2">• 添加详细的备注有助于回顾记忆</li>
+                            <li class="mb-2">• 点赞功能可以表达您对事件的喜爱</li>
+                            <li>• 定期整理事件可以保持时间线整洁</li>
+                        </ul>
+                    </div>
+                </div>
+            </aside>
         </div>
-    </div>
+    </article>
 {% endblock %}
 
 {% block scripts %}

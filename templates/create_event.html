@@ -1,61 +1,161 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <div class="row">
-        <div class="col-lg-8 mx-auto">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h2 class="card-title mb-4">📅 创建新事件</h2>
-                    
-                    <form method="POST" action="{{ url_for('create_event') }}">
-                        <div class="row g-3">
-                            <!-- 好友名称 -->
-                            <div class="col-md-6">
-                                <label for="friend_name" class="form-label">👥 好友名称</label>
-                                <input type="text" class="form-control" id="friend_name" name="friend_name" required>
-                            </div>
-                            
-                            <!-- 世界名称 -->
-                            <div class="col-md-6">
-                                <label for="world_name" class="form-label">🌍 世界名称</label>
-                                <input type="text" class="form-control" id="world_name" name="world_name" required>
-                            </div>
-                            
-                            <!-- 世界标签 -->
-                            <div class="col-md-12">
-                                <label for="world_tags" class="form-label">🏷️ 世界标签 (用逗号分隔)</label>
-                                <input type="text" class="form-control" id="world_tags" name="world_tags" placeholder="Social,Music,Dance">
-                            </div>
-                            
-                            <!-- 开始时间 -->
-                            <div class="col-md-6">
-                                <label for="start_time" class="form-label">⏰ 开始时间</label>
-                                <input type="datetime-local" class="form-control" id="start_time" name="start_time" required>
-                            </div>
-                            
-                            <!-- 结束时间 -->
-                            <div class="col-md-6">
-                                <label for="end_time" class="form-label">⏱️ 结束时间</label>
-                                <input type="datetime-local" class="form-control" id="end_time" name="end_time" required>
-                            </div>
-                            
-                            <!-- 备注信息 -->
-                            <div class="col-md-12">
-                                <label for="notes" class="form-label">📝 备注</label>
-                                <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="添加关于此次事件的备注..."></textarea>
-                            </div>
-                            
-                            <!-- 操作按钮 -->
-                            <div class="col-md-12">
-                                <div class="d-flex gap-2">
-                                    <button type="submit" class="btn btn-primary">创建事件</button>
-                                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">取消</a>
+    <main class="event-form-page" role="main">
+        <header class="page-header mb-4" role="banner">
+            <h1 class="text-center">📅 创建新事件</h1>
+            <p class="lead text-center text-muted">记录您在VRChat中的共享时刻</p>
+        </header>
+
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <section class="card shadow-sm" role="region" aria-labelledby="form-heading">
+                    <div class="card-body">
+                        <h2 id="form-heading" class="visually-hidden">创建事件表单</h2>
+                        
+                        <form method="POST" action="{{ url_for('create_event') }}" role="form" aria-label="创建事件表单">
+                            <div class="row g-3">
+                                <!-- 基本事件信息 -->
+                                <fieldset class="col-md-12 mb-4" aria-labelledby="basic-info-legend" role="group">
+                                    <legend id="basic-info-legend" class="h5 mb-3">基本事件信息</legend>
+                                    
+                                    <!-- 好友名称 -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="friend_name" class="form-label">
+                                            <span aria-hidden="true">👥</span> 好友名称 <span class="text-danger" aria-hidden="true">*</span>
+                                        </label>
+                                        <input type="text" class="form-control" id="friend_name" name="friend_name" 
+                                               required aria-required="true" autocomplete="off"
+                                               aria-describedby="friend-help"
+                                               placeholder="输入好友的用户名或昵称">
+                                        <small id="friend-help" class="form-text text-muted">
+                                            请输入您一起玩的好友的名称
+                                        </small>
+                                    </div>
+                                    
+                                    <!-- 世界名称 -->
+                                    <div class="col-md-6 mb-3">
+                                        <label for="world_name" class="form-label">
+                                            <span aria-hidden="true">🌍</span> 世界名称 <span class="text-danger" aria-hidden="true">*</span>
+                                        </label>
+                                        <input type="text" class="form-control" id="world_name" name="world_name" 
+                                               required aria-required="true" autocomplete="off"
+                                               aria-describedby="world-help"
+                                               placeholder="输入VRChat世界的名称">
+                                        <small id="world-help" class="form-text text-muted">
+                                            请输入您访问的VRChat世界名称
+                                        </small>
+                                    </div>
+                                </fieldset>
+
+                                <!-- 世界标签 -->
+                                <fieldset class="col-md-12 mb-4" aria-labelledby="tags-legend" role="group">
+                                    <legend id="tags-legend" class="h5 mb-3">
+                                        <span aria-hidden="true">🏷️</span> 世界标签
+                                    </legend>
+                                    <div class="mb-3">
+                                        <label for="world_tags" class="form-label">
+                                            标签（用逗号分隔）
+                                        </label>
+                                        <input type="text" class="form-control" id="world_tags" name="world_tags" 
+                                               autocomplete="off"
+                                               aria-describedby="tags-help"
+                                               placeholder="Social,Music,Dance,Game">
+                                        <small id="tags-help" class="form-text text-muted">
+                                            使用逗号分隔多个标签，例如：社交、音乐、游戏、舞蹈
+                                        </small>
+                                    </div>
+                                </fieldset>
+
+                                <!-- 时间信息 -->
+                                <fieldset class="col-md-12 mb-4" aria-labelledby="time-legend" role="group">
+                                    <legend id="time-legend" class="h5 mb-3">时间信息</legend>
+                                    
+                                    <div class="row">
+                                        <!-- 开始时间 -->
+                                        <div class="col-md-6 mb-3">
+                                            <label for="start_time" class="form-label">
+                                                <span aria-hidden="true">⏰</span> 开始时间 <span class="text-danger" aria-hidden="true">*</span>
+                                            </label>
+                                            <input type="datetime-local" class="form-control" id="start_time" name="start_time" 
+                                                   required aria-required="true"
+                                                   aria-describedby="start-help"
+                                                   aria-label="选择开始日期和时间"
+                                                   autocomplete="off">
+                                            <small id="start-help" class="form-text text-muted">
+                                                选择事件开始的日期和时间
+                                            </small>
+                                        </div>
+                                        
+                                        <!-- 结束时间 -->
+                                        <div class="col-md-6 mb-3">
+                                            <label for="end_time" class="form-label">
+                                                <span aria-hidden="true">⏱️</span> 结束时间 <span class="text-danger" aria-hidden="true">*</span>
+                                            </label>
+                                            <input type="datetime-local" class="form-control" id="end_time" name="end_time" 
+                                                   required aria-required="true"
+                                                   aria-describedby="end-help"
+                                                   aria-label="选择结束日期和时间"
+                                                   autocomplete="off">
+                                            <small id="end-help" class="form-text text-muted">
+                                                选择事件结束的日期和时间（必须晚于开始时间）
+                                            </small>
+                                        </div>
+                                    </div>
+                                </fieldset>
+
+                                <!-- 备注信息 -->
+                                <fieldset class="col-md-12 mb-4" aria-labelledby="notes-legend" role="group">
+                                    <legend id="notes-legend" class="h5 mb-3">
+                                        <span aria-hidden="true">📝</span> 备注信息
+                                    </legend>
+                                    <div class="mb-3">
+                                        <label for="notes" class="form-label">事件备注</label>
+                                        <textarea class="form-control" id="notes" name="notes" rows="4"
+                                                  aria-describedby="notes-help"
+                                                  placeholder="添加关于此次事件的备注，例如：有趣的时刻、难忘的经历、特别的互动..."></textarea>
+                                        <small id="notes-help" class="form-text text-muted">
+                                            您可以记录关于此次事件的任何细节，这些备注仅对您可见
+                                        </small>
+                                    </div>
+                                </fieldset>
+
+                                <!-- 表单操作 -->
+                                <div class="col-md-12">
+                                    <div class="d-flex gap-2" role="toolbar" aria-label="表单操作">
+                                        <button type="submit" class="btn btn-primary btn-lg flex-grow-1"
+                                                aria-label="创建并保存此事件">
+                                            创建事件
+                                        </button>
+                                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-lg"
+                                           aria-label="取消创建并返回时间线">
+                                            取消
+                                        </a>
+                                    </div>
+                                    <p class="text-muted small mt-3">
+                                        <span class="text-danger" aria-hidden="true">*</span> 表示必填字段
+                                    </p>
                                 </div>
                             </div>
+                        </form>
+                    </div>
+                </section>
+                
+                <!-- 创建提示 -->
+                <aside class="mt-4" role="complementary" aria-label="创建事件提示">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h3 class="h6 mb-3">💡 创建事件提示</h3>
+                            <ul class="list-unstyled small">
+                                <li class="mb-2">• 尽量提供详细的世界名称，方便日后查找</li>
+                                <li class="mb-2">• 使用有意义的标签可以帮助您更好地分类事件</li>
+                                <li class="mb-2">• 记录准确的时间有助于回顾时间线</li>
+                                <li>• 详细的备注可以让您在未来更好地回忆这些时刻</li>
+                            </ul>
                         </div>
-                    </form>
-                </div>
+                    </div>
+                </aside>
             </div>
         </div>
-    </div>
+    </main>
 {% endblock %}

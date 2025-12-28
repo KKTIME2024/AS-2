@@ -1,39 +1,100 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <div class="row justify-content-center">
-        <div class="col-lg-6">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h2 class="card-title text-center mb-4">注册</h2>
-                    
-                    {% if error %}
-                        <div class="alert alert-danger" role="alert">
-                            {{ error }}
-                        </div>
-                    {% endif %}
-                    
-                    <form method="POST" action="{{ url_for('register') }}">
-                        <div class="mb-3">
-                            <label for="username" class="form-label">用户名</label>
-                            <input type="text" class="form-control" id="username" name="username" required>
-                            <div class="form-text">请输入一个唯一的用户名</div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="password" class="form-label">密码</label>
-                            <input type="password" class="form-control" id="password" name="password" required>
-                            <div class="form-text">请输入一个安全的密码</div>
-                        </div>
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary btn-lg">注册</button>
-                        </div>
-                    </form>
-                    
-                    <div class="text-center mt-3">
-                        <p>已经有账号？ <a href="{{ url_for('login') }}">登录</a></p>
+    <main class="auth-page" role="main">
+        <div class="row justify-content-center">
+            <div class="col-lg-6">
+                <section class="card shadow-sm" role="region" aria-labelledby="register-heading">
+                    <div class="card-body">
+                        <header class="card-header bg-transparent border-0 text-center mb-4">
+                            <h1 id="register-heading" class="card-title h3">注册新账户</h1>
+                            <p class="text-muted">加入VRChat Memory Keeper，开始记录您的回忆</p>
+                        </header>
+                        
+                        <!-- 错误提示 -->
+                        {% if error %}
+                            <div class="alert alert-danger" role="alert" aria-live="assertive">
+                                <span class="alert-message">{{ error }}</span>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- 注册表单 -->
+                        <form method="POST" action="{{ url_for('register') }}" role="form" aria-label="注册表单">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">
+                                    用户名 <span class="text-danger" aria-hidden="true">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="username" name="username" 
+                                       required aria-required="true" autocomplete="username"
+                                       aria-describedby="username-help"
+                                       placeholder="请输入用户名（3-20个字符）"
+                                       minlength="3" maxlength="20">
+                                <small id="username-help" class="form-text text-muted">
+                                    用户名必须唯一，长度为3-20个字符，可以包含字母、数字和下划线
+                                </small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="password" class="form-label">
+                                    密码 <span class="text-danger" aria-hidden="true">*</span>
+                                </label>
+                                <input type="password" class="form-control" id="password" name="password" 
+                                       required aria-required="true" autocomplete="new-password"
+                                       aria-describedby="password-help"
+                                       placeholder="请输入密码（至少6个字符）"
+                                       minlength="6">
+                                <small id="password-help" class="form-text text-muted">
+                                    密码长度至少6个字符，建议使用字母、数字和特殊字符的组合
+                                </small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="confirm-password" class="form-label">
+                                    确认密码 <span class="text-danger" aria-hidden="true">*</span>
+                                </label>
+                                <input type="password" class="form-control" id="confirm-password" name="confirm_password"
+                                       required aria-required="true" autocomplete="new-password"
+                                       aria-describedby="confirm-help"
+                                       placeholder="请再次输入密码"
+                                       minlength="6">
+                                <small id="confirm-help" class="form-text text-muted">
+                                    请再次输入密码以确保输入正确
+                                </small>
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg" 
+                                        aria-label="注册VRChat Memory Keeper账户">
+                                    注册
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <!-- 登录链接 -->
+                        <footer class="card-footer bg-transparent border-0 text-center mt-4">
+                            <p class="mb-0">
+                                已经有账号？
+                                <a href="{{ url_for('login') }}" aria-label="登录现有账户">
+                                    立即登录
+                                </a>
+                            </p>
+                            <p class="text-muted small mt-2">
+                                登录后即可继续记录您的VRChat回忆
+                            </p>
+                        </footer>
                     </div>
-                </div>
+                </section>
+                
+                <!-- 辅助提示 -->
+                <aside class="text-center mt-3" role="complementary" aria-label="注册提示">
+                    <p class="text-muted small">
+                        注册即表示您同意我们的服务条款和隐私政策。
+                    </p>
+                    <p class="text-muted small">
+                        您的所有数据将安全存储，仅供您个人访问。
+                    </p>
+                </aside>
             </div>
         </div>
-    </div>
+    </main>
 {% endblock %}

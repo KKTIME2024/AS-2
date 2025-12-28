@@ -81,6 +81,144 @@ def load_user(user_id):
 
 
 # ------------------------------
+# 错误处理和事务管理
+# ------------------------------
+
+def handle_db_operation(operation_func, success_redirect=None,
+                        success_message=None, error_template=None,
+                        success_redirect_args=None, **kwargs):
+    """统一的数据库操作错误处理函数
+
+    Args:
+        operation_func: 执行数据库操作的函数
+        success_redirect: 成功后的重定向路由
+        success_message: 成功后的Flash消息
+        error_template: 错误时渲染的模板
+        success_redirect_args: 重定向的额外参数（字典）
+        **kwargs: 传递给operation_func的参数
+
+    Returns:
+        Flask响应对象
+    """
+    from flask import flash, redirect, url_for, render_template
+
+    try:
+        # 执行数据库操作
+        result = operation_func(**kwargs)
+
+        # 提交事务
+        db.session.commit()
+
+        # 设置成功消息
+        if success_message:
+            flash(success_message, 'success')
+
+        # 重定向或返回结果
+        if success_redirect:
+            if success_redirect_args:
+                return redirect(
+                    url_for(success_redirect, **success_redirect_args))
+            return redirect(url_for(success_redirect))
+        return result
+
+    except Exception as e:
+        # 回滚事务
+        db.session.rollback()
+
+        # 记录错误（实际项目中应使用日志库）
+        print(f"数据库操作错误: {str(e)}")
+
+        # 设置错误消息
+        error_msg = f"操作失败: {str(e)}"
+        flash(error_msg, 'danger')
+
+        # 返回错误页面或重定向
+        if error_template:
+            return render_template(error_template, error=error_msg, **kwargs)
+        # 默认重定向到上一页或主页
+        return redirect(url_for('index'))
+
+
+def validate_event_form(form_data):
+    """验证事件表单数据
+
+    Args:
+        form_data: 表单数据字典
+
+    Returns:
+        tuple: (是否有效, 错误消息列表, 清理后的数据)
+    """
+    errors = []
+    cleaned_data = {}
+
+    # 必填字段验证
+    required_fields = ['friend_name', 'world_name', 'start_time', 'end_time']
+    for field in required_fields:
+        value = form_data.get(field, '').strip()
+        if not value:
+            errors.append(f"'{field}' 是必填字段")
+        cleaned_data[field] = value
+
+    # 时间格式验证
+    if 'start_time' in cleaned_data and 'end_time' in cleaned_data:
+        try:
+            start_time = datetime.strptime(
+                cleaned_data['start_time'], '%Y-%m-%dT%H:%M')
+            end_time = datetime.strptime(
+                cleaned_data['end_time'], '%Y-%m-%dT%H:%M')
+
+            if end_time <= start_time:
+                errors.append("结束时间必须晚于开始时间")
+        except ValueError:
+            errors.append("时间格式不正确，请使用 YYYY-MM-DDTHH:MM 格式")
+
+    # 清理输入，防止XSS攻击
+    for key, value in cleaned_data.items():
+        if isinstance(value, str):
+            # 简单的HTML标签过滤
+            cleaned_data[key] = value.replace('<', '&lt;').replace('>', '&gt;')
+
+    return len(errors) == 0, errors, cleaned_data
+
+
+def handle_api_db_operation(
+        operation_func, success_response_func=None, **kwargs):
+    """统一的API数据库操作错误处理函数
+
+    Args:
+        operation_func: 执行数据库操作的函数
+        success_response_func: 成功时创建响应的函数
+        **kwargs: 传递给operation_func的参数
+
+    Returns:
+        Flask JSON响应对象
+    """
+    from flask import jsonify
+
+    try:
+        # 执行数据库操作
+        result = operation_func(**kwargs)
+
+        # 提交事务
+        db.session.commit()
+
+        # 创建成功响应
+        if success_response_func:
+            return success_response_func(result)
+        return jsonify({'success': True, 'result': result})
+
+    except Exception as e:
+        # 回滚事务
+        db.session.rollback()
+
+        # 记录错误
+        print(f"API数据库操作错误: {str(e)}")
+
+        # 返回错误响应
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ------------------------------
 # 路由定义
 # ------------------------------
 
@@ -222,9 +360,21 @@ def logout():
 def like_event(event_id):
     """AJAX点赞功能"""
     event = SharedEvent.query.get_or_404(event_id)
-    event.likes += 1  # 增加点赞数
-    db.session.commit()
-    return jsonify({'likes': event.likes})
+
+    # 使用API错误处理包装的数据库操作
+    def like_event_operation():
+        event.likes += 1  # 增加点赞数
+        return event.likes
+
+    # 成功响应函数
+    def success_response(likes):
+        return jsonify({'success': True, 'likes': likes})
+
+    # 调用API错误处理函数
+    return handle_api_db_operation(
+        operation_func=like_event_operation,
+        success_response_func=success_response
+    )
 
 
 # ------------------------------
@@ -254,36 +404,57 @@ def get_or_create_world(world_name, world_tags):
 def create_event():
     """创建新事件"""
     if request.method == 'POST':
-        # 获取表单数据
-        friend_name = request.form.get('friend_name')
-        world_name = request.form.get('world_name')
-        world_tags = request.form.get('world_tags')
-        start_time_str = request.form.get('start_time')
-        end_time_str = request.form.get('end_time')
-        notes = request.form.get('notes')
+        # 表单验证
+        is_valid, errors, cleaned_data = validate_event_form(request.form)
 
-        # 处理时间
-        start_time, end_time, duration = process_event_time(start_time_str, end_time_str)
+        if not is_valid:
+            # 返回表单并显示错误
+            for error in errors:
+                flash(error, 'danger')
+            return render_template('create_event.html',
+                                   friend_name=request.form.get('friend_name'),
+                                   world_name=request.form.get('world_name'),
+                                   world_tags=request.form.get('world_tags'),
+                                   start_time=request.form.get('start_time'),
+                                   end_time=request.form.get('end_time'),
+                                   notes=request.form.get('notes'))
 
-        # 查找或创建世界
-        world = get_or_create_world(world_name, world_tags)
+        # 使用错误处理包装的数据库操作
+        def create_event_operation(
+                friend_name, world_name, world_tags, start_time_str, end_time_str, notes):
+            # 处理时间
+            start_time, end_time, duration = process_event_time(
+                start_time_str, end_time_str)
 
-        # 创建新事件
-        new_event = SharedEvent(
-            user_id=current_user.id,
-            world_id=world.id,
-            friend_name=friend_name,
-            start_time=start_time,
-            end_time=end_time,
-            duration=duration,
-            notes=notes
+            # 查找或创建世界
+            world = get_or_create_world(world_name, world_tags)
+
+            # 创建新事件
+            new_event = SharedEvent(
+                user_id=current_user.id,
+                world_id=world.id,
+                friend_name=friend_name,
+                start_time=start_time,
+                end_time=end_time,
+                duration=duration,
+                notes=notes
+            )
+            db.session.add(new_event)
+            return new_event
+
+        # 调用错误处理函数
+        return handle_db_operation(
+            operation_func=create_event_operation,
+            success_redirect='index',
+            success_message='事件创建成功！',
+            error_template='create_event.html',
+            friend_name=cleaned_data['friend_name'],
+            world_name=cleaned_data['world_name'],
+            world_tags=request.form.get('world_tags', ''),
+            start_time_str=cleaned_data['start_time'],
+            end_time_str=cleaned_data['end_time'],
+            notes=request.form.get('notes', '')
         )
-
-        # 保存到数据库
-        db.session.add(new_event)
-        db.session.commit()
-
-        return redirect(url_for('index'))
 
     return render_template('create_event.html')
 
@@ -300,32 +471,56 @@ def edit_event(event_id):
         return redirect(url_for('index'))
 
     if request.method == 'POST':
-        # 获取表单数据
-        friend_name = request.form.get('friend_name')
-        world_name = request.form.get('world_name')
-        world_tags = request.form.get('world_tags')
-        start_time_str = request.form.get('start_time')
-        end_time_str = request.form.get('end_time')
-        notes = request.form.get('notes')
+        # 表单验证
+        is_valid, errors, cleaned_data = validate_event_form(request.form)
 
-        # 处理时间
-        start_time, end_time, duration = process_event_time(start_time_str, end_time_str)
+        if not is_valid:
+            # 返回表单并显示错误
+            for error in errors:
+                flash(error, 'danger')
+            # 重新格式化时间用于表单
+            event.start_time_formatted = request.form.get('start_time', '')
+            event.end_time_formatted = request.form.get('end_time', '')
+            return render_template('edit_event.html', event=event,
+                                   friend_name=request.form.get('friend_name'),
+                                   world_name=request.form.get('world_name'),
+                                   world_tags=request.form.get('world_tags'),
+                                   notes=request.form.get('notes'))
 
-        # 查找或创建世界
-        world = get_or_create_world(world_name, world_tags)
+        # 使用错误处理包装的数据库操作
+        def edit_event_operation(
+                friend_name, world_name, world_tags, start_time_str, end_time_str, notes):
+            # 处理时间
+            start_time, end_time, duration = process_event_time(
+                start_time_str, end_time_str)
 
-        # 更新事件
-        event.friend_name = friend_name
-        event.world_id = world.id
-        event.start_time = start_time
-        event.end_time = end_time
-        event.duration = duration
-        event.notes = notes
+            # 查找或创建世界
+            world = get_or_create_world(world_name, world_tags)
 
-        # 保存更改
-        db.session.commit()
+            # 更新事件
+            event.friend_name = friend_name
+            event.world_id = world.id
+            event.start_time = start_time
+            event.end_time = end_time
+            event.duration = duration
+            event.notes = notes
 
-        return redirect(url_for('event_detail', event_id=event.id))
+            return event
+
+        # 调用错误处理函数
+        return handle_db_operation(
+            operation_func=edit_event_operation,
+            success_redirect='event_detail',
+            success_message='事件更新成功！',
+            error_template='edit_event.html',
+            success_redirect_args={'event_id': event.id},
+            friend_name=cleaned_data['friend_name'],
+            world_name=cleaned_data['world_name'],
+            world_tags=request.form.get('world_tags', ''),
+            start_time_str=cleaned_data['start_time'],
+            end_time_str=cleaned_data['end_time'],
+            notes=request.form.get('notes', '')
+        )
 
     # 格式化时间用于表单
     event.start_time_formatted = event.start_time.strftime('%Y-%m-%dT%H:%M')
@@ -345,11 +540,16 @@ def delete_event(event_id):
     if event.user_id != current_user.id:
         return redirect(url_for('index'))
 
-    # 删除事件（关联的标签会通过级联删除自动清理）
-    db.session.delete(event)
-    db.session.commit()
+    # 使用错误处理包装的数据库操作
+    def delete_event_operation():
+        db.session.delete(event)
 
-    return redirect(url_for('index'))
+    # 调用错误处理函数
+    return handle_db_operation(
+        operation_func=delete_event_operation,
+        success_redirect='index',
+        success_message='事件删除成功！'
+    )
 
 
 # ------------------------------
@@ -360,23 +560,46 @@ def delete_event(event_id):
 @login_required
 def add_tag(event_id):
     """为事件添加标签"""
-    tag_name = request.form.get('tag_name').strip()
-    if tag_name:
-        event = SharedEvent.query.get_or_404(event_id)
+    # 获取事件，不存在则返回404
+    event = SharedEvent.query.get_or_404(event_id)
 
+    # 验证事件所有者
+    if event.user_id != current_user.id:
+        return redirect(url_for('index'))
+
+    # 获取标签名称
+    tag_name = request.form.get('tag_name', '').strip()
+
+    # 验证标签名称
+    if not tag_name:
+        flash('标签名称不能为空', 'danger')
+        return redirect(url_for('event_detail', event_id=event_id))
+
+    if len(tag_name) > 50:
+        flash('标签名称不能超过50个字符', 'danger')
+        return redirect(url_for('event_detail', event_id=event_id))
+
+    # 使用错误处理包装的数据库操作
+    def add_tag_operation():
         # 检查标签是否已存在
         existing_tag = EventTag.query.filter_by(
-            event_id=event.id,
-            tag_name=tag_name
-        ).first()
+            event_id=event_id, tag_name=tag_name).first()
+        if existing_tag:
+            # 如果标签已存在，不视为错误，只是不重复添加
+            return '标签已存在'
 
-        if not existing_tag:
-            # 添加新标签
-            new_tag = EventTag(event_id=event.id, tag_name=tag_name)
-            db.session.add(new_tag)
-            db.session.commit()
+        # 添加新标签
+        new_tag = EventTag(event_id=event.id, tag_name=tag_name)
+        db.session.add(new_tag)
+        return '标签添加成功'
 
-    return redirect(url_for('event_detail', event_id=event_id))
+    # 调用错误处理函数
+    return handle_db_operation(
+        operation_func=add_tag_operation,
+        success_redirect='event_detail',
+        success_message='标签添加成功！',
+        success_redirect_args={'event_id': event_id}
+    )
 
 
 # ------------------------------
@@ -387,14 +610,29 @@ def add_tag(event_id):
 @login_required
 def update_notes(event_id):
     """更新事件备注"""
-    notes = request.form.get('notes')
     event = SharedEvent.query.get_or_404(event_id)
 
-    # 更新备注
-    event.notes = notes
-    db.session.commit()
+    # 验证事件所有者
+    if event.user_id != current_user.id:
+        return redirect(url_for('index'))
 
-    return redirect(url_for('event_detail', event_id=event_id))
+    # 获取备注并清理输入
+    notes = request.form.get('notes', '')
+    # 简单的HTML标签过滤
+    cleaned_notes = notes.replace('<', '&lt;').replace('>', '&gt;')
+
+    # 使用错误处理包装的数据库操作
+    def update_notes_operation():
+        event.notes = cleaned_notes
+        return '备注更新成功'
+
+    # 调用错误处理函数
+    return handle_db_operation(
+        operation_func=update_notes_operation,
+        success_redirect='event_detail',
+        success_message='备注更新成功！',
+        success_redirect_args={'event_id': event_id}
+    )
 
 
 # ------------------------------
