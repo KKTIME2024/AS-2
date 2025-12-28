@@ -3,6 +3,42 @@
 {% block content %}
     <h1 class="mb-4">共同房间事件时间线</h1>
     
+    <!-- 标签筛选 -->
+    <div class="mb-4">
+        <h5>🏷️ 按标签筛选</h5>
+        <div class="d-flex flex-wrap gap-2">
+            {% if selected_tag %}
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    📋 全部事件
+                </a>
+            {% else %}
+                <a href="{{ url_for('index') }}" class="btn btn-outline-primary active">
+                    📋 全部事件
+                </a>
+            {% endif %}
+            
+            {% if all_tags %}
+                {% for tag in all_tags %}
+                    {% if selected_tag == tag %}
+                        <a href="{{ url_for('index', tag=tag) }}" class="btn btn-primary">
+                            {{ tag }}
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('index', tag=tag) }}" class="btn btn-outline-primary">
+                            {{ tag }}
+                        </a>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
+                <span class="text-muted">暂无可用标签</span>
+            {% endif %}
+        </div>
+        
+        {% if selected_tag %}
+            <p class="mt-2 text-muted">筛选结果: <strong>{{ selected_tag }}</strong></p>
+        {% endif %}
+    </div>
+    
     <div class="row">
         {% if events %}
             {% for event in events %}

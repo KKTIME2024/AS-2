@@ -60,10 +60,14 @@
                     <!-- 备注信息 -->
                     <div class="mb-4">
                         <h5>📝 备注</h5>
+                        <form method="POST" action="{{ url_for('update_notes', event_id=event.id) }}">
+                            <div class="mb-3">
+                                <textarea name="notes" rows="4" class="form-control" placeholder="添加或编辑备注">{{ event.notes or '' }}</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">保存备注</button>
+                        </form>
                         {% if event.notes %}
-                            <p>{{ event.notes }}</p>
-                        {% else %}
-                            <p class="text-muted">暂无备注</p>
+                            <p class="mt-3 text-muted">当前备注: {{ event.notes }}</p>
                         {% endif %}
                     </div>
                     
@@ -75,8 +79,20 @@
                         </button>
                     </div>
                     
-                    <!-- 返回按钮 -->
-                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">返回时间线</a>
+                    <!-- 事件管理按钮 -->
+                    <div class="d-flex gap-2 mt-4">
+                        <a href="{{ url_for('edit_event', event_id=event.id) }}" class="btn btn-primary">
+                            ✏️ 编辑事件
+                        </a>
+                        <form method="POST" action="{{ url_for('delete_event', event_id=event.id) }}" onsubmit="return confirm('确定要删除这个事件吗？此操作不可恢复。');">
+                            <button type="submit" class="btn btn-danger">
+                                🗑️ 删除事件
+                            </button>
+                        </form>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary ms-auto">
+                            ↩️ 返回时间线
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

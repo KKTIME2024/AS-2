@@ -21,9 +21,11 @@ def client():
 @pytest.fixture
 def authenticated_client(client):
     """创建一个已认证的测试客户端"""
-    # 在测试数据库中创建用户
+    # 在测试数据库中创建用户，使用哈希密码
+    from werkzeug.security import generate_password_hash
+    
     with app.app_context():
-        test_user = User(username="testuser", password_hash="testpass")
+        test_user = User(username="testuser", password_hash=generate_password_hash("testpass"))
         db.session.add(test_user)
         db.session.commit()
 

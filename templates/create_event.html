@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="card-title mb-4">📅 创建新事件</h2>
+                    
+                    <form method="POST" action="{{ url_for('create_event') }}">
+                        <div class="row g-3">
+                            <!-- 好友名称 -->
+                            <div class="col-md-6">
+                                <label for="friend_name" class="form-label">👥 好友名称</label>
+                                <input type="text" class="form-control" id="friend_name" name="friend_name" required>
+                            </div>
+                            
+                            <!-- 世界名称 -->
+                            <div class="col-md-6">
+                                <label for="world_name" class="form-label">🌍 世界名称</label>
+                                <input type="text" class="form-control" id="world_name" name="world_name" required>
+                            </div>
+                            
+                            <!-- 世界标签 -->
+                            <div class="col-md-12">
+                                <label for="world_tags" class="form-label">🏷️ 世界标签 (用逗号分隔)</label>
+                                <input type="text" class="form-control" id="world_tags" name="world_tags" placeholder="Social,Music,Dance">
+                            </div>
+                            
+                            <!-- 开始时间 -->
+                            <div class="col-md-6">
+                                <label for="start_time" class="form-label">⏰ 开始时间</label>
+                                <input type="datetime-local" class="form-control" id="start_time" name="start_time" required>
+                            </div>
+                            
+                            <!-- 结束时间 -->
+                            <div class="col-md-6">
+                                <label for="end_time" class="form-label">⏱️ 结束时间</label>
+                                <input type="datetime-local" class="form-control" id="end_time" name="end_time" required>
+                            </div>
+                            
+                            <!-- 备注信息 -->
+                            <div class="col-md-12">
+                                <label for="notes" class="form-label">📝 备注</label>
+                                <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="添加关于此次事件的备注..."></textarea>
+                            </div>
+                            
+                            <!-- 操作按钮 -->
+                            <div class="col-md-12">
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary">创建事件</button>
+                                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">取消</a>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
