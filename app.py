@@ -70,6 +70,21 @@ class EventTag(db.Model):
     tag_name = db.Column(db.String(50), primary_key=True)
 
 
+class GameLog(db.Model):
+    """真实游戏日志模型"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False)  # 事件发生时间
+    event_type = db.Column(
+        db.String(50),
+        nullable=False)  # 事件类型：位置变动、玩家加入、玩家离开
+    world_name = db.Column(db.String(200))  # 世界名称
+    world_id = db.Column(db.String(100))  # 世界ID，如#53949
+    player_name = db.Column(db.String(80), nullable=False)  # 玩家名称
+    is_friend = db.Column(db.Boolean, default=False)  # 是否为好友
+    created_at = db.Column(db.DateTime, default=datetime.now)  # 记录创建时间
+
+
 # ------------------------------
 # 登录管理器回调
 # ------------------------------
@@ -632,6 +647,265 @@ def update_notes(event_id):
         success_redirect='event_detail',
         success_message='备注更新成功！',
         success_redirect_args={'event_id': event_id}
+    )
+
+
+# ------------------------------
+# 游戏日志导入和转换路由
+# ------------------------------
+
+@app.route('/api/gamelog/import', methods=['POST'])
+@login_required
+def import_game_logs():
+    """导入真实游戏日志数据"""
+    # 从请求中获取日志数据
+    logs_data = request.get_json()
+    if not logs_data:
+        return jsonify({'success': False, 'error': '没有提供日志数据'}), 400
+
+    # 使用API错误处理包装的数据库操作
+    def import_logs_operation():
+        imported_count = 0
+        for log_entry in logs_data:
+            # 解析日志条目
+            timestamp_str = log_entry.get('timestamp')
+            event_type = log_entry.get('event_type')
+            world_name = log_entry.get('world_name')
+            world_id = log_entry.get('world_id')
+            player_name = log_entry.get('player_name')
+            is_friend = log_entry.get('is_friend', False)
+
+            # 验证必填字段
+            if not all([timestamp_str, event_type, player_name]):
+                continue
+
+            # 转换时间字符串为datetime对象
+            try:
+                # 处理不同的时间格式
+                if ' ' in timestamp_str and '/' in timestamp_str:
+                    # 格式：12/28 01:53
+                    timestamp = datetime.strptime(timestamp_str, '%m/%d %H:%M')
+                    # 设置当前年份
+                    timestamp = timestamp.replace(year=datetime.now().year)
+                else:
+                    # ISO格式或其他格式
+                    timestamp = datetime.fromisoformat(timestamp_str)
+            except ValueError:
+                continue
+
+            # 创建游戏日志记录
+            game_log = GameLog(
+                user_id=current_user.id,
+                timestamp=timestamp,
+                event_type=event_type,
+                world_name=world_name,
+                world_id=world_id,
+                player_name=player_name,
+                is_friend=is_friend
+            )
+            db.session.add(game_log)
+            imported_count += 1
+
+        return imported_count
+
+    # 成功响应函数
+    def success_response(imported_count):
+        return jsonify({'success': True, 'imported_count': imported_count})
+
+    # 调用API错误处理函数
+    return handle_api_db_operation(
+        operation_func=import_logs_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/gamelog/convert', methods=['POST'])
+@login_required
+def convert_game_logs():
+    """将游戏日志转换为SharedEvent"""
+    # 使用API错误处理包装的数据库操作
+    def convert_logs_operation():
+        # 1. 获取当前用户的所有游戏日志
+        game_logs = GameLog.query.filter_by(
+            user_id=current_user.id).order_by(
+            GameLog.timestamp).all()
+
+        # 2. 按玩家分组，跟踪玩家的加入和离开事件
+        player_sessions = {}
+        converted_count = 0
+
+        for log in game_logs:
+            player_name = log.player_name
+
+            if log.event_type == '玩家加入':
+                # 记录玩家加入时间和当前世界
+                player_sessions[player_name] = {
+                    'start_time': log.timestamp,
+                    'world_name': log.world_name,
+                    'world_id': log.world_id
+                }
+
+            elif log.event_type == '玩家离开' and player_name in player_sessions:
+                # 玩家离开，创建SharedEvent
+                session = player_sessions.pop(player_name)
+
+                # 计算持续时间
+                duration = int(
+                    (log.timestamp - session['start_time']).total_seconds())
+
+                # 查找或创建世界
+                world = get_or_create_world(session['world_name'], '')
+
+                # 创建SharedEvent
+                event = SharedEvent(
+                    user_id=current_user.id,
+                    world_id=world.id,
+                    friend_name=player_name,
+                    start_time=session['start_time'],
+                    end_time=log.timestamp,
+                    duration=duration
+                )
+                db.session.add(event)
+                converted_count += 1
+
+        return converted_count
+
+    # 成功响应函数
+    def success_response(converted_count):
+        return jsonify({'success': True, 'converted_count': converted_count})
+
+    # 调用API错误处理函数
+    return handle_api_db_operation(
+        operation_func=convert_logs_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/gamelog/bulk_import', methods=['POST'])
+@login_required
+def bulk_import_game_logs():
+    """批量导入游戏日志文本数据"""
+    """批量导入游戏日志文本数据，格式如：
+    12/28 01:53 位置变动 メゾン荘 201号室 #53949 friends+
+    12/28 01:52 玩家离开 💚 SaKi43
+    """
+    log_text = request.form.get('log_text', '')
+    if not log_text:
+        return jsonify({'success': False, 'error': '没有提供日志文本'}), 400
+
+    # 使用API错误处理包装的数据库操作
+    def bulk_import_operation():
+        # 预处理：将多行记录合并为单行
+        processed_lines = []
+        current_line = []
+
+        for line in log_text.strip().split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+
+            # 检查是否是新记录的开始（以日期格式开头，如 12/28）
+            if '/' in line and len(line.split()[0]) >= 5:
+                # 保存当前记录（如果有）
+                if current_line:
+                    processed_lines.append(' '.join(current_line))
+                # 开始新记录
+                current_line = [line]
+            else:
+                # 追加到当前记录
+                if current_line:
+                    current_line.append(line)
+
+        # 保存最后一条记录
+        if current_line:
+            processed_lines.append(' '.join(current_line))
+
+        imported_count = 0
+
+        for full_line in processed_lines:
+            full_line = full_line.strip()
+            if not full_line:
+                continue
+
+            # 解析日志行
+            parts = full_line.split()
+            if len(parts) < 4:
+                continue
+
+            # 解析时间
+            date_part = parts[0]
+            time_part = parts[1]
+            try:
+                timestamp_str = f"{date_part} {time_part}"
+                timestamp = datetime.strptime(timestamp_str, '%m/%d %H:%M')
+                timestamp = timestamp.replace(year=datetime.now().year)
+            except ValueError:
+                continue
+
+            # 解析事件类型
+            event_type = parts[2]
+            if event_type not in ['位置变动', '玩家加入', '玩家离开']:
+                continue
+
+            player_name = ''
+            world_name = ''
+            world_id = ''
+            is_friend = False
+
+            if event_type == '位置变动':
+                # 解析世界信息
+                # 格式：位置变动 メゾン荘 201号室 #53949 friends+
+                world_parts = parts[3:]
+                for i, part in enumerate(world_parts):
+                    if part.startswith('#'):
+                        world_id = part
+                        world_name = ' '.join(world_parts[:i])
+                        if i + \
+                                1 < len(world_parts) and world_parts[i + 1] == 'friends+':
+                            is_friend = True
+                        break
+                else:
+                    world_name = ' '.join(world_parts)
+
+                player_name = '系统'
+
+            else:  # 玩家加入或玩家离开
+                # 解析玩家信息
+                # 格式：玩家离开 💚 SaKi43
+                player_parts = parts[3:]
+                if len(player_parts) >= 2:
+                    if player_parts[0] == '💚':
+                        is_friend = True
+                        player_name = ' '.join(player_parts[1:])
+                    else:
+                        is_friend = False
+                        player_name = ' '.join(player_parts)
+                elif len(player_parts) == 1:
+                    player_name = player_parts[0]
+
+            # 创建游戏日志记录
+            game_log = GameLog(
+                user_id=current_user.id,
+                timestamp=timestamp,
+                event_type=event_type,
+                world_name=world_name,
+                world_id=world_id,
+                player_name=player_name,
+                is_friend=is_friend
+            )
+            db.session.add(game_log)
+            imported_count += 1
+
+        return imported_count
+
+    # 成功响应函数
+    def success_response(imported_count):
+        return jsonify({'success': True, 'imported_count': imported_count})
+
+    # 调用API错误处理函数
+    return handle_api_db_operation(
+        operation_func=bulk_import_operation,
+        success_response_func=success_response
     )
 
 
