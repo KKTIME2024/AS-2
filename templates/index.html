@@ -6,6 +6,43 @@
         <p class="lead text-muted">浏览您与好友在VRChat中的共享时刻</p>
     </header>
 
+    <!-- 搜索区域 -->
+    <section class="search-section mb-4" role="search" aria-labelledby="search-heading">
+        <h2 id="search-heading" class="h5">🔍 搜索事件</h2>
+        <form method="GET" action="{{ url_for('index') }}" class="search-form" aria-label="事件搜索表单">
+            <div class="row g-3">
+                <div class="col-md-10">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <span aria-hidden="true">🔎</span>
+                            <span class="visually-hidden">搜索关键词</span>
+                        </span>
+                        <input type="text" class="form-control form-control-lg" name="search" 
+                               placeholder="搜索好友名称、世界名称、标签或日期..." 
+                               aria-describedby="search-help" 
+                               value="{{ search_query or '' }}" 
+                               autocomplete="off">
+                        <button type="submit" class="btn btn-primary" 
+                                aria-label="执行搜索">
+                            <span aria-hidden="true">🔍</span>
+                            <span class="visually-hidden">搜索</span>
+                        </button>
+                        {% if search_query %}
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary" 
+                               aria-label="清除搜索条件">
+                                <span aria-hidden="true">✕</span>
+                                <span class="visually-hidden">清除</span>
+                            </a>
+                        {% endif %}
+                    </div>
+                    <small id="search-help" class="form-text text-muted">
+                        支持搜索：好友名称、世界名称、世界标签、自定义标签、日期（如：2023-12-25 或 2023-12）
+                    </small>
+                </div>
+            </div>
+        </form>
+    </section>
+
     <!-- 标签筛选区域 -->
     <section class="tag-filter-section mb-4" role="region" aria-labelledby="filter-heading">
         <h2 id="filter-heading" class="h5">🏷️ 按标签筛选</h2>
@@ -46,6 +83,23 @@
                 <div class="mt-2" role="status" aria-live="polite">
                     <p class="text-muted">
                         当前筛选结果: <strong>{{ selected_tag }}</strong>
+                    </p>
+                </div>
+            {% endif %}
+            
+            {% if search_query or start_date or end_date %}
+                <div class="mt-2" role="status" aria-live="polite">
+                    <p class="text-muted">
+                        当前搜索条件: 
+                        {% if search_query %}
+                            <strong>关键词: {{ search_query }}</strong>
+                        {% endif %}
+                        {% if start_date %}
+                            <strong>开始日期: {{ start_date }}</strong>
+                        {% endif %}
+                        {% if end_date %}
+                            <strong>结束日期: {{ end_date }}</strong>
+                        {% endif %}
                     </p>
                 </div>
             {% endif %}

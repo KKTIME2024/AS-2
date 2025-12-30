@@ -278,10 +278,116 @@ def filter_events_by_tag(event_query, selected_tag):
     )
 
 
+def parse_search_query(search_query):
+    """解析搜索查询，提取关键词和日期范围
+
+    Args:
+        search_query: 搜索查询字符串
+
+    Returns:
+        tuple: (关键词列表, 开始日期, 结束日期)
+    """
+    import re
+    from datetime import datetime, timedelta
+
+    keywords = []
+    start_date = None
+    end_date = None
+
+    if not search_query:
+        return keywords, start_date, end_date
+
+    # 分割搜索词
+    search_terms = search_query.split()
+
+    # 日期格式正则表达式
+    date_patterns = [
+        (r'^(\d{4}-\d{2}-\d{2})$', '%Y-%m-%d'),  # YYYY-MM-DD
+        (r'^(\d{4}-\d{2})$', '%Y-%m'),           # YYYY-MM
+    ]
+
+    for term in search_terms:
+        is_date = False
+
+        # 检查是否是日期
+        for pattern, date_format in date_patterns:
+            match = re.match(pattern, term)
+            if match:
+                is_date = True
+                try:
+                    date_obj = datetime.strptime(match.group(1), date_format)
+
+                    if date_format == '%Y-%m-%d':
+                        # 具体日期，设置为当天
+                        if not start_date or date_obj < start_date:
+                            start_date = date_obj
+                        if not end_date or date_obj > end_date:
+                            end_date = date_obj
+                    elif date_format == '%Y-%m':
+                        # 月份，设置为该月的第一天和最后一天
+                        month_start = date_obj
+                        # 计算该月的最后一天
+                        if month_start.month == 12:
+                            month_end = month_start.replace(
+                                year=month_start.year + 1, month=1, day=1) - timedelta(days=1)
+                        else:
+                            month_end = month_start.replace(
+                                month=month_start.month + 1, day=1) - timedelta(days=1)
+
+                        if not start_date or month_start < start_date:
+                            start_date = month_start
+                        if not end_date or month_end > end_date:
+                            end_date = month_end
+                except ValueError:
+                    pass
+                break
+
+        # 如果不是日期，添加到关键词列表
+        if not is_date:
+            keywords.append(term)
+
+    return keywords, start_date, end_date
+
+
+def enhance_search_conditions(keywords):
+    """增强搜索条件，支持更高级的模糊匹配
+
+    Args:
+        keywords: 关键词列表
+
+    Returns:
+        list: 搜索条件列表
+    """
+    from sqlalchemy import or_, and_
+
+    search_conditions = []
+
+    for keyword in keywords:
+        keyword_like = f'%{keyword}%'
+
+        # 基本搜索条件
+        conditions = [
+            SharedEvent.friend_name.ilike(keyword_like),
+            World.world_name.ilike(keyword_like),
+            World.tags.ilike(keyword_like),
+            EventTag.tag_name.ilike(keyword_like)
+        ]
+
+        # 高级模糊匹配：搜索好友名称和世界名称的组合
+        if len(keyword) > 2:
+            conditions.append(
+                SharedEvent.friend_name.ilike(f'%{keyword[:2]}%'))
+            conditions.append(World.world_name.ilike(f'%{keyword[:2]}%'))
+
+        search_conditions.append(or_(*conditions))
+
+    return search_conditions
+
+
 @app.route('/')
 @login_required
 def index():
-    """时间线主页，支持标签筛选"""
+    """时间线主页，支持标签筛选和高级搜索"""
     # 收集所有可用标签
     all_unique_tags = get_all_unique_tags()
 
@@ -290,6 +396,48 @@ def index():
     query = SharedEvent.query.filter_by(user_id=current_user.id)
     filtered_query = filter_events_by_tag(query, selected_tag)
 
+    # 处理搜索
+    search_query = request.args.get('search')
+    start_date = None
+    end_date = None
+
+    if search_query:
+        from sqlalchemy import or_, and_
+
+        # 解析搜索查询，提取关键词和日期
+        keywords, parsed_start_date, parsed_end_date = parse_search_query(
+            search_query)
+        start_date = parsed_start_date
+        end_date = parsed_end_date
+
+        # 构建搜索条件
+        search_conditions = []
+
+        if keywords:
+            # 增强搜索条件，支持更高级的模糊匹配
+            keyword_conditions = enhance_search_conditions(keywords)
+            search_conditions.extend(keyword_conditions)
+
+        if search_conditions:
+            # 连接表并应用搜索条件
+            filtered_query = filtered_query.join(World)
+            filtered_query = filtered_query.outerjoin(EventTag)
+            filtered_query = filtered_query.filter(and_(*search_conditions))
+            filtered_query = filtered_query.group_by(SharedEvent.id)  # 去重
+
+    # 处理日期范围
+    if start_date:
+        from datetime import datetime
+        filtered_query = filtered_query.filter(
+            SharedEvent.start_time >= start_date)
+
+    if end_date:
+        from datetime import timedelta
+        # 包含结束日期当天
+        end_datetime = end_date + timedelta(days=1)
+        filtered_query = filtered_query.filter(
+            SharedEvent.start_time < end_datetime)
+
     # 按时间倒序获取事件
     events = filtered_query.order_by(SharedEvent.start_time.desc()).all()
 
@@ -297,7 +445,8 @@ def index():
         'index.html',
         events=events,
         all_tags=all_unique_tags,
-        selected_tag=selected_tag
+        selected_tag=selected_tag,
+        search_query=search_query
     )
 
 
