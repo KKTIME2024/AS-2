@@ -311,18 +311,42 @@ function initializeKeyboardShortcuts() {
             return;
         }
         
-        // 按 'c' 键跳转到创建事件页面（如果用户已登录）
+        // 按 'c' 键跳转到创建事件页面
         if (e.key === 'c' && !hasModifiers) {
             e.preventDefault();
-            const createEventLink = document.querySelector('a[href*="create_event"], a[aria-label*="创建事件"]');
+            // 改进选择器，尝试多种方式找到创建事件链接
+            let createEventLink = null;
+            
+            // 方式1：通过URL模式查找
+            createEventLink = document.querySelector('a[href*="create_event"]');
+            
+            // 方式2：通过aria-label查找
+            if (!createEventLink) {
+                createEventLink = document.querySelector('a[aria-label*="创建事件"]');
+            }
+            
+            // 方式3：通过链接文本查找
+            if (!createEventLink) {
+                const links = document.querySelectorAll('a.nav-link');
+                for (const link of links) {
+                    if (link.textContent.includes('创建事件') || link.textContent.includes('创建')) {
+                        createEventLink = link;
+                        break;
+                    }
+                }
+            }
+            
             if (createEventLink) {
                 window.location.href = createEventLink.href;
+            } else {
+                // 如果找不到创建事件链接，显示提示
+                showNotification('请先登录才能创建事件。', 'info');
             }
             return;
         }
         
-        // 按 'h' 或 '?' 键显示快捷键帮助
-        if ((e.key === 'h' || e.key === '?') && !hasModifiers) {
+        // 按 'h' 键显示快捷键帮助
+        if (e.key === 'h' && !hasModifiers) {
             e.preventDefault();
             if (!isHelpModalVisible) {
                 showKeyboardShortcutsHelp();
@@ -407,7 +431,7 @@ function showKeyboardShortcutsHelp() {
                         <dt class="col-sm-6"><kbd>g</kbd></dt>
                         <dd class="col-sm-6">跳转到首页</dd>
                         
-                        <dt class="col-sm-6"><kbd>h</kbd> 或 <kbd>?</kbd></dt>
+                        <dt class="col-sm-6"><kbd>h</kbd></dt>
                         <dd class="col-sm-6">显示此帮助</dd>
                         
                         <dt class="col-sm-6"><kbd>l</kbd></dt>

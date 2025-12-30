@@ -3,7 +3,7 @@
 {% block content %}
     <main class="event-form-page" role="main">
         <header class="page-header mb-4" role="banner">
-            <h1 class="text-center">✏️ 编辑事件</h1>
+            <h1 class="text-center">编辑事件</h1>
             <p class="lead text-center text-muted">更新您的VRChat记忆记录</p>
         </header>
 
@@ -53,7 +53,7 @@
                                 <!-- 世界标签 -->
                                 <fieldset class="col-md-12 mb-4" aria-labelledby="tags-legend" role="group">
                                     <legend id="tags-legend" class="h5 mb-3">
-                                        <span aria-hidden="true">🏷️</span> 世界标签
+                                        世界标签
                                     </legend>
                                     <div class="mb-3">
                                         <label for="world_tags" class="form-label">
@@ -78,7 +78,7 @@
                                         <!-- 开始时间 -->
                                         <div class="col-md-6 mb-3">
                                             <label for="start_time" class="form-label">
-                                                <span aria-hidden="true">⏰</span> 开始时间 <span class="text-danger" aria-hidden="true">*</span>
+                                                开始时间 <span class="text-danger" aria-hidden="true">*</span>
                                             </label>
                                             <input type="datetime-local" class="form-control" id="start_time" name="start_time" 
                                                    value="{{ event.start_time_formatted }}"
@@ -94,7 +94,7 @@
                                         <!-- 结束时间 -->
                                         <div class="col-md-6 mb-3">
                                             <label for="end_time" class="form-label">
-                                                <span aria-hidden="true">⏱️</span> 结束时间 <span class="text-danger" aria-hidden="true">*</span>
+                                                结束时间 <span class="text-danger" aria-hidden="true">*</span>
                                             </label>
                                             <input type="datetime-local" class="form-control" id="end_time" name="end_time" 
                                                    value="{{ event.end_time_formatted }}"
@@ -112,7 +112,7 @@
                                 <!-- 备注信息 -->
                                 <fieldset class="col-md-12 mb-4" aria-labelledby="notes-legend" role="group">
                                     <legend id="notes-legend" class="h5 mb-3">
-                                        <span aria-hidden="true">📝</span> 备注信息
+                                        备注信息
                                     </legend>
                                     <div class="mb-3">
                                         <label for="notes" class="form-label">事件备注</label>
@@ -149,7 +149,7 @@
                 <!-- 删除事件 -->
                 <section class="card shadow-sm border-danger mt-4" role="region" aria-labelledby="delete-heading">
                     <div class="card-body">
-                        <h3 id="delete-heading" class="card-title h5 text-danger">⚠️ 删除事件</h3>
+                        <h3 id="delete-heading" class="card-title h5 text-danger">删除事件</h3>
                         <p class="text-muted mb-3">
                             此操作将永久删除此事件，包括所有关联的标签和备注。删除后无法恢复。
                         </p>
@@ -158,7 +158,7 @@
                               class="d-inline">
                             <button type="submit" class="btn btn-danger"
                                     aria-label="永久删除此事件（此操作不可恢复）">
-                                🗑️ 删除事件
+                                删除事件
                             </button>
                         </form>
                     </div>

@@ -8,7 +8,7 @@
 
     <!-- 搜索区域 -->
     <section class="search-section mb-4" role="search" aria-labelledby="search-heading">
-        <h2 id="search-heading" class="h5">🔍 搜索事件</h2>
+        <h2 id="search-heading" class="h5">搜索事件</h2>
         <form method="GET" action="{{ url_for('index') }}" class="search-form" aria-label="事件搜索表单">
             <div class="row g-3">
                 <div class="col-md-10">
@@ -45,19 +45,19 @@
 
     <!-- 标签筛选区域 -->
     <section class="tag-filter-section mb-4" role="region" aria-labelledby="filter-heading">
-        <h2 id="filter-heading" class="h5">🏷️ 按标签筛选</h2>
+        <h2 id="filter-heading" class="h5">按标签筛选</h2>
         <div class="filter-controls" role="toolbar" aria-label="标签筛选工具">
             <div class="d-flex flex-wrap gap-2" role="list" aria-label="筛选标签列表">
                 {% if selected_tag %}
                     <a href="{{ url_for('index') }}" class="btn btn-primary" role="button" 
-                       aria-label="显示全部事件" aria-pressed="false">
-                        📋 全部事件
-                    </a>
+                           aria-label="显示全部事件" aria-pressed="false">
+                            全部事件
+                        </a>
                 {% else %}
                     <a href="{{ url_for('index') }}" class="btn btn-outline-primary active" role="button" 
-                       aria-label="显示全部事件（当前选中）" aria-pressed="true">
-                        📋 全部事件
-                    </a>
+                           aria-label="显示全部事件（当前选中）" aria-pressed="true">
+                            全部事件
+                        </a>
                 {% endif %}
                 
                 {% if all_tags %}
@@ -193,25 +193,25 @@
                 <div class="empty-state-actions">
                     {% if current_user.is_authenticated %}
                         <a href="{{ url_for('create_event') }}" class="btn btn-primary btn-lg"
-                           aria-label="创建第一个事件">
-                            ➕ 创建第一个事件
-                        </a>
-                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-lg"
-                           aria-label="刷新页面">
-                            🔄 刷新
-                        </a>
+                                               aria-label="创建第一个事件">
+                                            创建第一个事件
+                                        </a>
+                                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-lg"
+                                           aria-label="刷新页面">
+                                            刷新
+                                        </a>
                     {% else %}
                         <div class="auth-prompts">
                             <p class="empty-state-secondary">请先登录或注册以开始记录您的VRChat回忆</p>
                             <div class="empty-state-actions">
                                 <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg"
-                                   aria-label="登录账户">
-                                    🔑 登录账户
-                                </a>
-                                <a href="{{ url_for('register') }}" class="btn btn-outline-primary btn-lg"
-                                   aria-label="注册新账户">
-                                    📝 注册新账户
-                                </a>
+                                           aria-label="登录账户">
+                                        登录账户
+                                    </a>
+                                    <a href="{{ url_for('register') }}" class="btn btn-outline-primary btn-lg"
+                                       aria-label="注册新账户">
+                                        注册新账户
+                                    </a>
                             </div>
                         </div>
                     {% endif %}

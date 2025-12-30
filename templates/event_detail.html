@@ -119,7 +119,7 @@
                 <!-- 备注信息 -->
                 <section class="card shadow-sm mb-4" role="region" aria-labelledby="notes-heading">
                     <div class="card-body">
-                        <h2 id="notes-heading" class="card-title h5 mb-3">📝 备注</h2>
+                        <h2 id="notes-heading" class="card-title h5 mb-3">备注</h2>
                         
                         <form method="POST" action="{{ url_for('update_notes', event_id=event.id) }}" 
                               role="form" aria-label="编辑备注">
@@ -172,18 +172,18 @@
                         <a href="{{ url_for('edit_event', event_id=event.id) }}" 
                            class="btn btn-primary" role="button"
                            aria-label="编辑此事件">
-                            ✏️ 编辑事件
+                            编辑事件
                         </a>
                         <form method="POST" action="{{ url_for('delete_event', event_id=event.id) }}" 
                               onsubmit="return confirm('确定要删除这个事件吗？此操作不可恢复。');">
                             <button type="submit" class="btn btn-danger" role="button"
                                     aria-label="删除此事件（此操作不可恢复）">
-                                🗑️ 删除事件
+                                删除事件
                             </button>
                         </form>
                         <a href="{{ url_for('index') }}" class="btn btn-outline-secondary ms-auto" role="button"
                            aria-label="返回时间线列表">
-                            ↩️ 返回时间线
+                            返回时间线
                         </a>
                     </div>
                 </section>
@@ -193,7 +193,7 @@
             <aside class="col-lg-4" role="complementary" aria-label="事件相关信息">
                 <div class="card shadow-sm mb-4">
                     <div class="card-body">
-                        <h3 class="card-title h5 mb-3">📋 事件信息</h3>
+                        <h3 class="card-title h5 mb-3">事件信息</h3>
                         <dl class="row">
                             <dt class="col-sm-5 text-muted">事件ID:</dt>
                             <dd class="col-sm-7">
