@@ -278,8 +278,251 @@ def filter_events_by_tag(event_query, selected_tag):
     )
 
 
+def preprocess_query(query):
+    """查询预处理层
+
+    Args:
+        query: 原始查询字符串
+
+    Returns:
+        tuple: (预处理后的查询, 提取的日期关键词)
+    """
+    import re
+
+    # 1. 规范化处理
+    query = query.strip().lower()
+
+    # 2. 中文数字转阿拉伯数字
+    # 简单实现，支持年份转换
+    chinese_nums = {
+        '零': '0', '一': '1', '二': '2', '三': '3', '四': '4',
+        '五': '5', '六': '6', '七': '7', '八': '8', '九': '9'
+    }
+
+    def replace_chinese_num(match):
+        num_str = match.group(0)
+        result = ''
+        for char in num_str:
+            if char in chinese_nums:
+                result += chinese_nums[char]
+            else:
+                result += char
+        return result
+
+    # 替换中文数字，特别是年份
+    query = re.sub(r'[零一二三四五六七八九]{4}', replace_chinese_num, query)
+
+    # 3. 提取日期相关词汇
+    date_keywords = []
+    # 简单的日期关键词提取
+    date_patterns = [
+        r'\d{4}-\d{1,2}-\d{1,2}',  # YYYY-MM-DD
+        r'\d{4}-\d{1,2}',           # YYYY-MM
+        r'\d{1,2}-\d{1,2}',         # MM-DD
+        r'\d{4}年\d{1,2}月\d{1,2}日?',  # YYYY年MM月DD日
+        r'\d{1,2}月\d{1,2}日?',       # MM月DD日
+        r'今天|昨天|明天|前天|后天|大前天|大后天',
+        r'\d+天前|\d+天后',
+        r'春节|国庆节|元旦|劳动节|中秋节'
+    ]
+
+    for pattern in date_patterns:
+        matches = re.findall(pattern, query)
+        date_keywords.extend(matches)
+
+    return query, date_keywords
+
+
+def parse_relative_date(query, base_date=None):
+    """相对日期解析
+
+    Args:
+        query: 查询字符串
+        base_date: 基准日期，默认为当前日期
+
+    Returns:
+        datetime: 解析后的日期
+    """
+    import re
+    from datetime import datetime, timedelta
+
+    if base_date is None:
+        base_date = datetime.now()
+
+    patterns = {
+        r'^(今天|today)$': 0,
+        r'^(昨天|yesterday)$': -1,
+        r'^(明天|tomorrow)$': 1,
+        r'^前天$': -2,
+        r'^后天$': 2,
+        r'^大前天$': -3,
+        r'^大后天$': 3,
+        r'^(\d+)天前$': lambda m: -int(m.group(1)),
+        r'^(\d+)天后$': lambda m: int(m.group(1))
+    }
+
+    for pattern, delta in patterns.items():
+        if match := re.fullmatch(pattern, query):
+            if callable(delta):
+                offset = delta(match)
+            else:
+                offset = delta
+            # 创建一个新的日期对象，只保留年、月、日，不保留时间
+            result_date = base_date + timedelta(days=offset)
+            return result_date.replace(
+                hour=0, minute=0, second=0, microsecond=0)
+
+    return None
+
+
+def parse_chinese_date(text, base_date=None):
+    """中文日期识别
+
+    Args:
+        text: 中文日期文本
+        base_date: 基准日期，默认为当前日期
+
+    Returns:
+        datetime: 解析后的日期
+    """
+    import re
+    from datetime import datetime, timedelta
+
+    if base_date is None:
+        base_date = datetime.now()
+
+    # 中文数字映射
+    chinese_num_map = {
+        '零': 0, '一': 1, '二': 2, '三': 3, '四': 4,
+        '五': 5, '六': 6, '七': 7, '八': 8, '九': 9
+    }
+
+    # 中文月份映射
+    chinese_month_map = {
+        '一': 1, '二': 2, '三': 3, '四': 4,
+        '五': 5, '六': 6, '七': 7, '八': 8,
+        '九': 9, '十': 10, '十一': 11, '十二': 12
+    }
+
+    # 中文日期映射
+    chinese_day_map = {
+        '初一': 1, '初二': 2, '初三': 3, '初四': 4, '初五': 5,
+        '初六': 6, '初七': 7, '初八': 8, '初九': 9, '初十': 10,
+        '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15,
+        '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20,
+        '二十一': 21, '二十二': 22, '二十三': 23, '二十四': 24, '二十五': 25,
+        '二十六': 26, '二十七': 27, '二十八': 28, '二十九': 29, '三十': 30, '三十一': 31
+    }
+
+    # 辅助函数：将中文数字转换为阿拉伯数字
+    def chinese_to_arabic(chinese_num):
+        if chinese_num in chinese_month_map:
+            return chinese_month_map[chinese_num]
+        if chinese_num in chinese_day_map:
+            return chinese_day_map[chinese_num]
+
+        # 处理复杂的中文数字，如"二十五"
+        if len(chinese_num) == 1:
+            return chinese_num_map.get(chinese_num, None)
+        elif len(chinese_num) == 2:
+            if chinese_num[0] == '十':
+                return 10 + chinese_num_map.get(chinese_num[1], 0)
+            else:
+                return chinese_num_map.get(
+                    chinese_num[0], 0) * 10 + chinese_num_map.get(chinese_num[1], 0)
+        elif len(chinese_num) == 3:
+            return 20 + chinese_num_map.get(chinese_num[2], 0)  # 如"二十一"=21
+        return None
+
+    # 模式1: YYYY年MM月DD日
+    pattern1 = r'(\d{4})年(\d{1,2})月(\d{1,2})日?'
+    match = re.match(pattern1, text)
+    if match:
+        year, month, day = match.groups()
+        return datetime(int(year), int(month), int(day))
+
+    # 模式2: MM月DD日
+    pattern2 = r'(\d{1,2})月(\d{1,2})日?'
+    match = re.match(pattern2, text)
+    if match:
+        month, day = match.groups()
+        return datetime(base_date.year, int(month), int(day))
+
+    # 模式3: 中文月份 + 中文日期（如"十二月二十五日"）
+    pattern3 = r'([\u4e00-\u9fa5]+月)([\u4e00-\u9fa5]+日?)'
+    match = re.match(pattern3, text)
+    if match:
+        month_str, day_str = match.groups()
+        month_str = month_str.rstrip('月')
+        day_str = day_str.rstrip('日')
+
+        # 处理月份
+        month = chinese_month_map.get(month_str, None)
+        if month is None:
+            return None
+
+        # 处理日期
+        day = chinese_to_arabic(day_str)
+        if day is None:
+            day = chinese_day_map.get(day_str, None)
+        if day is None:
+            return None
+
+        return datetime(base_date.year, month, day)
+
+    # 模式4: 中文月份 + 数字日期（如"十二月25日"）
+    pattern4 = r'([\u4e00-\u9fa5]+月)(\d{1,2})日?'
+    match = re.match(pattern4, text)
+    if match:
+        month_str, day_str = match.groups()
+        month_str = month_str.rstrip('月')
+
+        # 处理月份
+        month = chinese_month_map.get(month_str, None)
+        if month is None:
+            return None
+
+        # 处理日期
+        day = int(day_str)
+
+        return datetime(base_date.year, month, day)
+
+    return None
+
+
+def parse_holiday(text, base_year=None):
+    """节假日识别
+
+    Args:
+        text: 节假日文本
+        base_year: 基准年份，默认为当前年份
+
+    Returns:
+        datetime: 节假日的具体日期
+    """
+    from datetime import datetime
+
+    if base_year is None:
+        base_year = datetime.now().year
+
+    holidays = {
+        "元旦": f"{base_year}-01-01",
+        "春节": f"{base_year}-02-10",  # 2025年春节是2月10日，实际应用中需要更复杂的计算
+        "劳动节": f"{base_year}-05-01",
+        "国庆节": f"{base_year}-10-01",
+        "中秋节": f"{base_year}-09-12"   # 2025年中秋节是9月12日
+    }
+
+    for holiday, date_str in holidays.items():
+        if holiday in text:
+            return datetime.strptime(date_str, '%Y-%m-%d')
+
+    return None
+
+
 def parse_search_query(search_query):
     """解析搜索查询，提取关键词和日期范围
+    采用多模式解析器架构，支持多种日期格式
 
     Args:
         search_query: 搜索查询字符串
@@ -297,50 +540,82 @@ def parse_search_query(search_query):
     if not search_query:
         return keywords, start_date, end_date
 
+    # 预处理查询
+    processed_query, date_keywords = preprocess_query(search_query)
+
     # 分割搜索词
-    search_terms = search_query.split()
+    search_terms = processed_query.split()
 
     # 日期格式正则表达式
     date_patterns = [
-        (r'^(\d{4}-\d{2}-\d{2})$', '%Y-%m-%d'),  # YYYY-MM-DD
-        (r'^(\d{4}-\d{2})$', '%Y-%m'),           # YYYY-MM
+        (r'^(\d{4}-\d{1,2}-\d{1,2})$', '%Y-%m-%d'),  # YYYY-MM-DD
+        (r'^(\d{4}-\d{1,2})$', '%Y-%m'),           # YYYY-MM
     ]
 
+    # 逐个处理搜索词
     for term in search_terms:
         is_date = False
 
-        # 检查是否是日期
-        for pattern, date_format in date_patterns:
-            match = re.match(pattern, term)
-            if match:
-                is_date = True
-                try:
-                    date_obj = datetime.strptime(match.group(1), date_format)
+        # 尝试解析相对日期
+        rel_date = parse_relative_date(term)
+        if rel_date:
+            is_date = True
+            # 对于相对日期，开始和结束日期都设为该日期
+            if not start_date or rel_date < start_date:
+                start_date = rel_date
+            if not end_date or rel_date > end_date:
+                end_date = rel_date
 
-                    if date_format == '%Y-%m-%d':
-                        # 具体日期，设置为当天
-                        if not start_date or date_obj < start_date:
-                            start_date = date_obj
-                        if not end_date or date_obj > end_date:
-                            end_date = date_obj
-                    elif date_format == '%Y-%m':
-                        # 月份，设置为该月的第一天和最后一天
-                        month_start = date_obj
-                        # 计算该月的最后一天
-                        if month_start.month == 12:
-                            month_end = month_start.replace(
-                                year=month_start.year + 1, month=1, day=1) - timedelta(days=1)
-                        else:
-                            month_end = month_start.replace(
-                                month=month_start.month + 1, day=1) - timedelta(days=1)
+        # 尝试解析中文日期
+        elif (chinese_date := parse_chinese_date(term)) is not None:
+            is_date = True
+            if not start_date or chinese_date < start_date:
+                start_date = chinese_date
+            if not end_date or chinese_date > end_date:
+                end_date = chinese_date
 
-                        if not start_date or month_start < start_date:
-                            start_date = month_start
-                        if not end_date or month_end > end_date:
-                            end_date = month_end
-                except ValueError:
-                    pass
-                break
+        # 尝试解析节假日
+        elif (holiday_date := parse_holiday(term)) is not None:
+            is_date = True
+            if not start_date or holiday_date < start_date:
+                start_date = holiday_date
+            if not end_date or holiday_date > end_date:
+                end_date = holiday_date
+
+        # 尝试解析标准日期格式
+        else:
+            for pattern, date_format in date_patterns:
+                match = re.match(pattern, term)
+                if match:
+                    is_date = True
+                    try:
+                        date_obj = datetime.strptime(
+                            match.group(1), date_format)
+
+                        if date_format == '%Y-%m-%d':
+                            # 具体日期，设置为当天
+                            if not start_date or date_obj < start_date:
+                                start_date = date_obj
+                            if not end_date or date_obj > end_date:
+                                end_date = date_obj
+                        elif date_format == '%Y-%m':
+                            # 月份，设置为该月的第一天和最后一天
+                            month_start = date_obj
+                            # 计算该月的最后一天
+                            if month_start.month == 12:
+                                month_end = month_start.replace(
+                                    year=month_start.year + 1, month=1, day=1) - timedelta(days=1)
+                            else:
+                                month_end = month_start.replace(
+                                    month=month_start.month + 1, day=1) - timedelta(days=1)
+
+                            if not start_date or month_start < start_date:
+                                start_date = month_start
+                            if not end_date or month_end > end_date:
+                                end_date = month_end
+                    except ValueError:
+                        pass
+                    break
 
         # 如果不是日期，添加到关键词列表
         if not is_date:
@@ -373,11 +648,31 @@ def enhance_search_conditions(keywords):
             EventTag.tag_name.ilike(keyword_like)
         ]
 
-        # 高级模糊匹配：搜索好友名称和世界名称的组合
+        # 高级模糊匹配：支持多种模糊匹配策略
+        if len(keyword) > 1:
+            # 前缀匹配
+            conditions.append(SharedEvent.friend_name.ilike(f'{keyword}%'))
+            conditions.append(World.world_name.ilike(f'{keyword}%'))
+
+            # 后缀匹配
+            conditions.append(SharedEvent.friend_name.ilike(f'%{keyword}'))
+            conditions.append(World.world_name.ilike(f'%{keyword}'))
+
         if len(keyword) > 2:
+            # 子串匹配
             conditions.append(
                 SharedEvent.friend_name.ilike(f'%{keyword[:2]}%'))
             conditions.append(World.world_name.ilike(f'%{keyword[:2]}%'))
+
+            # 对于长度大于3的关键词，使用多个子串匹配
+            if len(keyword) > 3:
+                # 取前3个字符和后3个字符
+                conditions.append(
+                    SharedEvent.friend_name.ilike(f'%{keyword[:3]}%'))
+                conditions.append(World.world_name.ilike(f'%{keyword[:3]}%'))
+                conditions.append(
+                    SharedEvent.friend_name.ilike(f'%{keyword[-3:]}%'))
+                conditions.append(World.world_name.ilike(f'%{keyword[-3:]}%'))
 
         search_conditions.append(or_(*conditions))
 
@@ -422,7 +717,8 @@ def index():
             # 连接表并应用搜索条件
             filtered_query = filtered_query.join(World)
             filtered_query = filtered_query.outerjoin(EventTag)
-            filtered_query = filtered_query.filter(and_(*search_conditions))
+            # 使用OR组合关键词条件，更符合用户搜索习惯
+            filtered_query = filtered_query.filter(or_(*search_conditions))
             filtered_query = filtered_query.group_by(SharedEvent.id)  # 去重
 
     # 处理日期范围
@@ -1113,13 +1409,19 @@ def generate_mock_data():
 # 应用初始化
 # ------------------------------
 
-with app.app_context():
-    """应用上下文内初始化数据库和模拟数据"""
-    db.create_all()  # 创建所有数据库表
+def init_db():
+    """初始化数据库"""
+    with app.app_context():
+        """应用上下文内初始化数据库和模拟数据"""
+        db.create_all()  # 创建所有数据库表
 
-    # 如果没有数据，生成模拟数据
-    if not User.query.first():
-        generate_mock_data()
+        # 如果没有数据，生成模拟数据
+        if not User.query.first():
+            generate_mock_data()
+
+
+# 确保在应用加载时就初始化数据库，无论运行方式如何
+init_db()
 
 
 # ------------------------------

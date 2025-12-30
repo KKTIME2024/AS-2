@@ -2,7 +2,7 @@
 
 // DOM 加载完成后执行
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🎮 VRChat Memory Keeper loaded!');
+    console.log('VRChat Memory Keeper loaded!');
     
     // 初始化所有功能
     initializeLikeButtons();

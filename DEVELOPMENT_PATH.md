@@ -64,7 +64,7 @@ CREATE TABLE event_tags (
 ### 2. 时间线主页
 ```html
 <div class="event-card">
-    <h5>🎮 与 Alice 在 The Black Cat</h5>
+    <h5>与 Alice 在 The Black Cat</h5>
     <p>⏰ 20:30 - 22:15 (1小时45分钟)</p>
     <p>🏷️ 标签:
         <span class="tag">Social</span>
