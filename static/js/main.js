@@ -231,7 +231,14 @@ style.textContent = `
 document.head.appendChild(style);
 
 // 页面离开确认
+let isFormSubmitting = false;
+
 window.addEventListener('beforeunload', function(e) {
+    // 如果表单正在提交，不显示提示
+    if (isFormSubmitting) {
+        return;
+    }
+    
     // 检查是否有未提交的表单
     const forms = document.querySelectorAll('form');
     let hasUnsavedChanges = false;
@@ -239,7 +246,8 @@ window.addEventListener('beforeunload', function(e) {
     forms.forEach(form => {
         const inputs = form.querySelectorAll('input, textarea');
         inputs.forEach(input => {
-            if (input.value.trim() && !input.dataset.originalValue) {
+            const originalValue = input.dataset.originalValue || '';
+            if (input.value.trim() !== originalValue.trim()) {
                 hasUnsavedChanges = true;
             }
         });
@@ -260,6 +268,11 @@ function saveFormInitialValues() {
         const inputs = form.querySelectorAll('input, textarea');
         inputs.forEach(input => {
             input.dataset.originalValue = input.value;
+        });
+        
+        // 监听表单提交事件，防止离开提示
+        form.addEventListener('submit', function() {
+            isFormSubmitting = true;
         });
     });
 }

@@ -1413,20 +1413,45 @@ def init_db():
     """初始化数据库"""
     with app.app_context():
         """应用上下文内初始化数据库和模拟数据"""
-        db.create_all()  # 创建所有数据库表
+        print("正在初始化数据库...")
+        try:
+            db.create_all()  # 创建所有数据库表
+            print("数据库表创建成功")
+        except Exception as e:
+            print(f"数据库表创建失败: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
         # 如果没有数据，生成模拟数据
-        if not User.query.first():
-            generate_mock_data()
+        try:
+            if not User.query.first():
+                print("生成模拟数据...")
+                generate_mock_data()
+                print("模拟数据生成完成")
+        except Exception as e:
+            print(f"模拟数据生成失败: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 
-# 确保在应用加载时就初始化数据库，无论运行方式如何
-init_db()
+# 数据库初始化标志
+_db_initialized = False
+
+# 在请求处理前初始化数据库，确保只执行一次
+
+
+@app.before_request
+def before_request():
+    global _db_initialized
+    if not _db_initialized:
+        init_db()
+        _db_initialized = True
 
 
 # ------------------------------
 # 启动应用
 # ------------------------------
-
 if __name__ == '__main__':
     app.run(debug=True)  # 开发模式运行应用
