@@ -281,6 +281,9 @@ function saveFormInitialValues() {
 document.addEventListener('DOMContentLoaded', saveFormInitialValues);
 
 // 初始化键盘快捷键
+let keyboardShortcutsHelpModal = null;
+let isHelpModalVisible = false;
+
 function initializeKeyboardShortcuts() {
     document.addEventListener('keydown', function(e) {
         // 忽略在输入框、文本域或可编辑元素中的按键
@@ -291,8 +294,11 @@ function initializeKeyboardShortcuts() {
             return;
         }
         
+        // 检查是否按下了修饰键
+        const hasModifiers = e.ctrlKey || e.altKey || e.metaKey;
+        
         // 按 '/' 键聚焦到搜索框（如果存在）
-        if (e.key === '/' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === '/' && !hasModifiers) {
             e.preventDefault();
             const searchInput = document.querySelector('input[type="search"], input[placeholder*="搜索"], #search-input');
             if (searchInput) {
@@ -302,20 +308,26 @@ function initializeKeyboardShortcuts() {
                 // 如果没有搜索框，显示提示
                 showNotification('当前页面没有搜索功能，请使用其他快捷键。', 'info');
             }
+            return;
         }
         
         // 按 'c' 键跳转到创建事件页面（如果用户已登录）
-        if (e.key === 'c' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'c' && !hasModifiers) {
+            e.preventDefault();
             const createEventLink = document.querySelector('a[href*="create_event"], a[aria-label*="创建事件"]');
             if (createEventLink) {
                 window.location.href = createEventLink.href;
             }
+            return;
         }
         
         // 按 'h' 或 '?' 键显示快捷键帮助
-        if ((e.key === 'h' || e.key === '?') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if ((e.key === 'h' || e.key === '?') && !hasModifiers) {
             e.preventDefault();
-            showKeyboardShortcutsHelp();
+            if (!isHelpModalVisible) {
+                showKeyboardShortcutsHelp();
+            }
+            return;
         }
         
         // 按 'Escape' 键关闭模态框或清除搜索
@@ -338,68 +350,82 @@ function initializeKeyboardShortcuts() {
                     showNotification('搜索已清除', 'info');
                 }
             }
+            return;
         }
         
-        // 按 'g' 然后 'h' 跳转到首页（Github风格导航）
-        if (e.key === 'g' && !e.ctrlKey && !e.altKey && !e.metaKey) {
-            // 设置一个短暂的超时来检测第二个键
-            const handleSecondKey = function(e2) {
-                if (e2.key === 'h' && !e2.ctrlKey && !e2.altKey && !e2.metaKey) {
-                    e2.preventDefault();
-                    const homeLink = document.querySelector('a[href="/"], a[href*="index"], .navbar-brand');
-                    if (homeLink) {
-                        window.location.href = homeLink.href;
-                    }
-                }
-                document.removeEventListener('keydown', handleSecondKey);
-            };
-            document.addEventListener('keydown', handleSecondKey);
-            setTimeout(() => {
-                document.removeEventListener('keydown', handleSecondKey);
-            }, 1000); // 1秒内检测第二个键
+        // 按 'g' 键跳转到首页
+        if (e.key === 'g' && !hasModifiers) {
+            e.preventDefault();
+            const homeLink = document.querySelector('a[href="/"], a[href*="index"], .navbar-brand');
+            if (homeLink) {
+                window.location.href = homeLink.href;
+            }
+            return;
+        }
+        
+        // 按 'l' 键跳转到登录页面（如果未登录）
+        if (e.key === 'l' && !hasModifiers) {
+            e.preventDefault();
+            const loginLink = document.querySelector('a[href*="login"], a[aria-label*="登录"]');
+            if (loginLink) {
+                window.location.href = loginLink.href;
+            }
+            return;
+        }
+        
+        // 按 'r' 键跳转到注册页面（如果未登录）
+        if (e.key === 'r' && !hasModifiers) {
+            e.preventDefault();
+            const registerLink = document.querySelector('a[href*="register"], a[aria-label*="注册"]');
+            if (registerLink) {
+                window.location.href = registerLink.href;
+            }
+            return;
         }
     });
 }
 
 // 显示键盘快捷键帮助
 function showKeyboardShortcutsHelp() {
-    const helpHtml = `
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">键盘快捷键</h5>
-            </div>
-            <div class="card-body">
-                <dl class="row mb-0">
-                    <dt class="col-sm-6"><kbd>/</kbd></dt>
-                    <dd class="col-sm-6">聚焦搜索框</dd>
-                    
-                    <dt class="col-sm-6"><kbd>c</kbd></dt>
-                    <dd class="col-sm-6">创建新事件（如已登录）</dd>
-                    
-                    <dt class="col-sm-6"><kbd>g</kbd> <kbd>h</kbd></dt>
-                    <dd class="col-sm-6">跳转到首页</dd>
-                    
-                    <dt class="col-sm-6"><kbd>h</kbd> 或 <kbd>?</kbd></dt>
-                    <dd class="col-sm-6">显示此帮助</dd>
-                    
-                    <dt class="col-sm-6"><kbd>Esc</kbd></dt>
-                    <dd class="col-sm-6">关闭模态框或清除搜索</dd>
-                    
-                    <dt class="col-sm-6"><kbd>j</kbd>/<kbd>k</kbd></dt>
-                    <dd class="col-sm-6">在事件列表中上下导航（如果可用）</dd>
-                </dl>
-                <p class="text-muted small mt-3">
-                    提示：快捷键仅在不在输入框中时有效。
-                </p>
-            </div>
-        </div>
-    `;
-    
-    // 创建模态框
     const modalId = 'keyboard-shortcuts-modal';
     let modal = document.getElementById(modalId);
     
     if (!modal) {
+        const helpHtml = `
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">键盘快捷键</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-6"><kbd>/</kbd></dt>
+                        <dd class="col-sm-6">聚焦搜索框</dd>
+                        
+                        <dt class="col-sm-6"><kbd>c</kbd></dt>
+                        <dd class="col-sm-6">创建新事件（如已登录）</dd>
+                        
+                        <dt class="col-sm-6"><kbd>g</kbd></dt>
+                        <dd class="col-sm-6">跳转到首页</dd>
+                        
+                        <dt class="col-sm-6"><kbd>h</kbd> 或 <kbd>?</kbd></dt>
+                        <dd class="col-sm-6">显示此帮助</dd>
+                        
+                        <dt class="col-sm-6"><kbd>l</kbd></dt>
+                        <dd class="col-sm-6">跳转到登录页面</dd>
+                        
+                        <dt class="col-sm-6"><kbd>r</kbd></dt>
+                        <dd class="col-sm-6">跳转到注册页面</dd>
+                        
+                        <dt class="col-sm-6"><kbd>Esc</kbd></dt>
+                        <dd class="col-sm-6">关闭模态框或清除搜索</dd>
+                    </dl>
+                    <p class="text-muted small mt-3">
+                        提示：快捷键仅在不在输入框中时有效。
+                    </p>
+                </div>
+            </div>
+        `;
+        
         modal = document.createElement('div');
         modal.id = modalId;
         modal.className = 'modal fade';
@@ -415,11 +441,19 @@ function showKeyboardShortcutsHelp() {
             </div>
         `;
         document.body.appendChild(modal);
+        
+        // 监听模态框关闭事件
+        modal.addEventListener('hidden.bs.modal', function() {
+            isHelpModalVisible = false;
+        });
+        
+        // 显示模态框
+        keyboardShortcutsHelpModal = new bootstrap.Modal(modal);
     }
     
     // 显示模态框
-    const modalInstance = new bootstrap.Modal(modal);
-    modalInstance.show();
+    isHelpModalVisible = true;
+    keyboardShortcutsHelpModal.show();
 }
 
 // 在页面右下角添加快捷键提示
