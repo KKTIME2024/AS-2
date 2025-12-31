@@ -1388,6 +1388,66 @@ def get_friend_stats():
     )
 
 
+@app.route('/api/friends/playtime')
+@login_required
+def get_friend_playtime():
+    """获取好友游玩总时长"""
+    from sqlalchemy import func
+
+    def get_friend_playtime_operation():
+        # 按好友统计总游玩时长
+        friend_playtime = db.session.query(
+            SharedEvent.friend_name,
+            func.sum(SharedEvent.duration).label('total_playtime')
+        ).filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).group_by(SharedEvent.friend_name).order_by(func.sum(SharedEvent.duration).desc()).all()
+        
+        # 按好友统计互动次数
+        friend_interactions = db.session.query(
+            SharedEvent.friend_name,
+            func.count(SharedEvent.id).label('count')
+        ).filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).group_by(SharedEvent.friend_name).order_by(func.count(SharedEvent.id).desc()).all()
+
+        # 获取所有好友列表
+        friends = current_user.friends.all()
+        friend_list = []
+        
+        for friend in friends:
+            # 查找该好友的总游玩时长
+            playtime = next((item.total_playtime for item in friend_playtime if item.friend_name == friend.username), 0)
+            
+            # 查找该好友的互动次数
+            interaction_count = next((item.count for item in friend_interactions if item.friend_name == friend.username), 0)
+            
+            friend_list.append({
+                'username': friend.username,
+                'total_playtime': playtime,
+                'interaction_count': interaction_count
+            })
+        
+        # 只返回实际好友的数据，不添加非好友用户
+        
+        # 按总游玩时长排序
+        friend_list.sort(key=lambda x: x['total_playtime'], reverse=True)
+
+        return {
+            'friends': friend_list
+        }
+
+    def success_response(result):
+        return jsonify({'success': True, 'data': result})
+
+    return handle_api_db_operation(
+        operation_func=get_friend_playtime_operation,
+        success_response_func=success_response
+    )
+
+
 @app.route('/api/stats/worlds')
 @login_required
 def get_world_stats():

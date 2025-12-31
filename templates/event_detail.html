@@ -369,8 +369,28 @@
                                 const responseData = await response.json();
                                 
                                 if (response.ok && responseData.success) {
-                                    // 重新加载评论
-                                    loadComments();
+                                    // 获取要删除的评论元素
+                                    const commentElement = this.closest('.comment');
+                                    if (commentElement) {
+                                        // 平滑删除动画
+                                        commentElement.style.transition = 'opacity 0.3s ease';
+                                        commentElement.style.opacity = '0';
+                                        
+                                        // 等待动画完成后移除元素
+                                        setTimeout(() => {
+                                            commentElement.remove();
+                                            
+                                            // 检查是否还有评论
+                                            const commentsContainer = document.getElementById('comments-container');
+                                            const noCommentsMessage = document.getElementById('no-comments-message');
+                                            const remainingComments = commentsContainer.querySelectorAll('.comment');
+                                            
+                                            if (remainingComments.length === 0) {
+                                                // 显示无评论提示
+                                                noCommentsMessage.classList.remove('d-none');
+                                            }
+                                        }, 300);
+                                    }
                                 } else {
                                     // 显示错误信息
                                     console.error('删除评论失败:', responseData.error || '未知错误');
@@ -426,12 +446,43 @@
                                 })
                             });
                             
-                            if (response.ok) {
-                                // 重新加载评论
-                                loadComments();
+                            const responseData = await response.json();
+                            
+                            if (response.ok && responseData.success) {
+                                // 隐藏回复表单
+                                const replyForm = document.getElementById(`reply-form-${commentId}`);
+                                replyForm.classList.add('d-none');
+                                replyForm.querySelector('.reply-content').value = '';
+                                
+                                // 获取回复列表
+                                const repliesContainer = document.getElementById(`replies-${commentId}`);
+                                
+                                // 创建新回复元素
+                                const newReplyElement = renderComment(responseData.comment);
+                                
+                                // 添加平滑进入动画
+                                newReplyElement.style.opacity = '0';
+                                newReplyElement.style.transform = 'translateY(-10px)';
+                                newReplyElement.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                                
+                                // 添加到回复列表
+                                repliesContainer.appendChild(newReplyElement);
+                                
+                                // 触发动画
+                                setTimeout(() => {
+                                    newReplyElement.style.opacity = '1';
+                                    newReplyElement.style.transform = 'translateY(0)';
+                                }, 10);
+                                
+                                // 添加事件监听
+                                addCommentEventListeners();
+                            } else {
+                                console.error('发送回复失败:', responseData.error || '未知错误');
+                                alert('发送回复失败: ' + (responseData.error || '未知错误'));
                             }
                         } catch (error) {
                             console.error('发送回复失败:', error);
+                            alert('发送回复失败: 网络错误');
                         }
                     });
                 });
@@ -458,14 +509,36 @@
                             body: JSON.stringify({ content: content })
                         });
                         
-                        if (response.ok) {
+                        const responseData = await response.json();
+                        
+                        if (response.ok && responseData.success) {
                             // 清空表单
                             commentForm.reset();
-                            // 重新加载评论
-                            loadComments();
+                            
+                            // 获取评论容器
+                            const commentsContainer = document.getElementById('comments-container');
+                            const noCommentsMessage = document.getElementById('no-comments-message');
+                            
+                            // 创建新评论元素
+                            const newCommentElement = renderComment(responseData.comment);
+                            
+                            // 如果没有评论，隐藏提示信息
+                            if (noCommentsMessage && !noCommentsMessage.classList.contains('d-none')) {
+                                noCommentsMessage.classList.add('d-none');
+                            }
+                            
+                            // 将新评论添加到列表顶部
+                            commentsContainer.prepend(newCommentElement);
+                            
+                            // 添加事件监听
+                            addCommentEventListeners();
+                        } else {
+                            console.error('发布评论失败:', responseData.error || '未知错误');
+                            alert('发布评论失败: ' + (responseData.error || '未知错误'));
                         }
                     } catch (error) {
                         console.error('发布评论失败:', error);
+                        alert('发布评论失败: 网络错误');
                     }
                 });
             }

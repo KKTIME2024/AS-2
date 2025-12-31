@@ -44,7 +44,7 @@
                                 欢迎, {{ current_user.username }}
                             </span>
                             <a class="nav-link" href="{{ url_for('logout') }}" role="menuitem" aria-label="退出登录">
-                                🔓 登出
+                                登出
                             </a>
                         {% else %}
                             <a class="nav-link" href="{{ url_for('login') }}" role="menuitem" aria-label="登录账户">
