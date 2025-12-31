@@ -2804,10 +2804,7 @@ def generate_mock_data():
     for i, event in enumerate(events, 1):
         participants = [p.username for p in event.participants]
         world = World.query.get(event.world_id)
-        print(
-            f"  事件{i}: 与{
-                event.friend_name}在{
-                world.world_name}, 参与者: {participants}")
+        print(f"  事件{i}: 与{event.friend_name}在{world.world_name}, 参与者: {participants}")
 
     print("\n固定预设数据生成完成！")
     print("场景总结：")
