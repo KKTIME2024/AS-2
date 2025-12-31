@@ -92,43 +92,59 @@
             // 初始化图表
             let eventTrendChart, friendInteractionChart, worldVisitChart;
             
-            // 加载事件统计数据
-            async function loadEventStats() {
+            // 缓存对象
+            const statsCache = {};
+            
+            // 并行加载所有统计数据
+            async function loadAllStats() {
+                // 检查缓存
+                if (statsCache.allStats) {
+                    updateAllStats(statsCache.allStats);
+                    return;
+                }
+                
                 try {
-                    const response = await fetch('/api/stats/events');
-                    if (response.ok) {
-                        const data = await response.json();
-                        updateEventStats(data.data);
-                    }
+                    // 并行请求所有API
+                    const [eventsResponse, friendsResponse, worldsResponse] = await Promise.all([
+                        fetch('/api/stats/events'),
+                        fetch('/api/stats/friends'),
+                        fetch('/api/stats/worlds')
+                    ]);
+                    
+                    // 并行解析响应
+                    const [eventsData, friendsData, worldsData] = await Promise.all([
+                        eventsResponse.json(),
+                        friendsResponse.json(),
+                        worldsResponse.json()
+                    ]);
+                    
+                    // 合并数据
+                    const allStats = {
+                        events: eventsData.data,
+                        friends: friendsData.data,
+                        worlds: worldsData.data
+                    };
+                    
+                    // 缓存数据
+                    statsCache.allStats = allStats;
+                    
+                    // 更新UI
+                    updateAllStats(allStats);
                 } catch (error) {
-                    console.error('加载事件统计失败:', error);
+                    console.error('加载统计数据失败:', error);
                 }
             }
             
-            // 加载好友统计数据
-            async function loadFriendStats() {
-                try {
-                    const response = await fetch('/api/stats/friends');
-                    if (response.ok) {
-                        const data = await response.json();
-                        updateFriendStats(data.data);
-                    }
-                } catch (error) {
-                    console.error('加载好友统计失败:', error);
-                }
-            }
-            
-            // 加载世界统计数据
-            async function loadWorldStats() {
-                try {
-                    const response = await fetch('/api/stats/worlds');
-                    if (response.ok) {
-                        const data = await response.json();
-                        updateWorldStats(data.data);
-                    }
-                } catch (error) {
-                    console.error('加载世界统计失败:', error);
-                }
+            // 更新所有统计数据
+            function updateAllStats(allStats) {
+                // 更新事件统计
+                updateEventStats(allStats.events);
+                
+                // 更新好友统计
+                updateFriendStats(allStats.friends);
+                
+                // 更新世界统计
+                updateWorldStats(allStats.worlds);
             }
             
             // 更新事件统计
@@ -182,6 +198,10 @@
                                 display: true,
                                 text: '事件趋势分析'
                             }
+                        },
+                        // 禁用动画以提高加载速度
+                        animation: {
+                            duration: 0
                         }
                     }
                 });
@@ -236,6 +256,10 @@
                                 legend: {
                                     display: false
                                 }
+                            },
+                            // 禁用动画以提高加载速度
+                            animation: {
+                                duration: 0
                             }
                         }
                     });
@@ -296,16 +320,18 @@
                                         }
                                     }
                                 }
+                            },
+                            // 禁用动画以提高加载速度
+                            animation: {
+                                duration: 0
                             }
                         }
                     });
                 }
             }
             
-            // 加载所有统计数据
-            loadEventStats();
-            loadFriendStats();
-            loadWorldStats();
+            // 延迟加载统计数据
+            setTimeout(loadAllStats, 100);
         });
     </script>
 {% endblock %}

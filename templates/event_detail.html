@@ -25,7 +25,17 @@
                             <div class="col-md-6">
                                 <dl class="row">
                                     <dt class="col-sm-4 text-muted">好友:</dt>
-                                    <dd class="col-sm-8">{{ event.friend_name }}</dd>
+                                    <dd class="col-sm-8">
+                                        {% if current_user.id == event.user_id %}
+                                            {{ event.friend_name }}
+                                        {% else %}
+                                            {% for participant in event.participants %}
+                                                {% if participant.id != current_user.id %}
+                                                    {{ participant.username }}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    </dd>
                                     
                                     <dt class="col-sm-4 text-muted">世界:</dt>
                                     <dd class="col-sm-8">{{ event.world.world_name }}</dd>
@@ -265,6 +275,9 @@
             // ------------------------------
             // 评论功能脚本
             // ------------------------------
+            
+            // 获取当前事件ID
+            const eventId = {{ event.id }};
             
             // 格式化日期
             function formatDate(dateString) {

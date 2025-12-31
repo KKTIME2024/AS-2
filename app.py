@@ -90,6 +90,19 @@ class SharedEvent(db.Model):
         backref=db.backref('participated_events', lazy='dynamic'),
         lazy='dynamic'
     )
+    
+    # 评论同步相关字段
+    sync_hash = db.Column(db.String(100))  # 同步哈希，用于识别真正的共同事件
+    sync_status = db.Column(db.String(20), default='pending')  # 同步状态：pending, syncing, synced
+    last_synced_at = db.Column(db.DateTime)  # 最后同步时间
+    
+    # 用于评论同步的关联
+    sync_comments = db.relationship(
+        'EventComment',
+        backref='sync_event',
+        primaryjoin='and_(SharedEvent.id == EventComment.event_id, EventComment.is_sync_comment == True)',
+        lazy='dynamic'
+    )
 
 
 class EventTag(db.Model):
@@ -158,6 +171,8 @@ class EventComment(db.Model):
             'event_comment.id',
             ondelete='CASCADE'),
         nullable=True)  # 支持回复
+    is_sync_comment = db.Column(db.Boolean, default=False)  # 是否为同步评论
+    sync_reference = db.Column(db.String(100))  # 同步引用，用于标识关联的评论
 
     user = db.relationship('User', backref='comments')
     event = db.relationship('SharedEvent', backref='comments')
@@ -198,7 +213,13 @@ class GameLog(db.Model):
     player_vrc_id = db.Column(db.String(100))  # VRChat唯一ID
     player_is_registered = db.Column(db.Boolean, default=False)  # 是否为注册用户
     is_friend = db.Column(db.Boolean, default=False)  # 是否为好友
+    session_id = db.Column(db.String(100))  # 会话ID，用于识别同一游戏会话
+    event_hash = db.Column(db.String(100))  # 事件哈希，用于识别共同事件
     created_at = db.Column(db.DateTime, default=datetime.now)  # 记录创建时间
+    
+    # 关联的SharedEvent
+    shared_event_id = db.Column(db.Integer, db.ForeignKey('shared_event.id'), nullable=True)
+    shared_event = db.relationship('SharedEvent', backref='game_logs')
 
 
 # ------------------------------
@@ -944,14 +965,26 @@ def logout():
 @app.route('/api/event/<int:event_id>/comments', methods=['GET'])
 @login_required
 def get_comments(event_id):
-    """获取事件评论"""
+    """获取事件评论，包括同一事件组内所有事件的评论"""
     event = SharedEvent.query.get_or_404(event_id)
 
     def get_comments_operation():
-        # 获取所有顶级评论（没有父评论的评论）
-        top_level_comments = EventComment.query.filter_by(
-            event_id=event_id, parent_id=None).order_by(
-            EventComment.created_at.desc()).all()
+        # 获取同一事件组内的所有事件
+        event_ids = [event_id]
+        if event.event_group_id:
+            # 查找同一事件组内的所有事件
+            group_events = SharedEvent.query.filter(
+                SharedEvent.event_group_id == event.event_group_id
+            ).all()
+            event_ids = [group_event.id for group_event in group_events]
+        
+        # 获取所有顶级评论（没有父评论的评论），包括同一事件组内所有事件的评论
+        top_level_comments = EventComment.query.filter(
+            EventComment.event_id.in_(event_ids),
+            EventComment.parent_id == None
+        ).order_by(
+            EventComment.created_at.desc()
+        ).all()
 
         # 递归获取评论的回复
         def serialize_comment(comment):
@@ -966,6 +999,8 @@ def get_comments(event_id):
                     'id': comment.user.id,
                     'username': comment.user.username
                 },
+                'event_id': comment.event_id,  # 添加事件ID，方便前端区分
+                'is_sync_comment': comment.is_sync_comment,
                 'replies': [serialize_comment(reply) for reply in sorted_replies]
             }
 
@@ -988,6 +1023,7 @@ def get_comments(event_id):
 @login_required
 def create_comment(event_id):
     """创建事件评论"""
+    import hashlib
     event = SharedEvent.query.get_or_404(event_id)
     data = request.get_json()
 
@@ -1003,6 +1039,53 @@ def create_comment(event_id):
             parent_id=data.get('parent_id')
         )
         db.session.add(new_comment)
+        
+        # 检查是否需要同步事件
+        def sync_related_events():
+            # 1. 提取评论中的同步信息
+            comment_content = data['content']
+            
+            # 2. 查找具有相似sync_hash的事件
+            if event.sync_hash:
+                # 查找相同sync_hash的其他事件
+                related_events = SharedEvent.query.filter(
+                    SharedEvent.sync_hash == event.sync_hash,
+                    SharedEvent.id != event.id
+                ).all()
+                
+                # 3. 如果找到相关事件，更新同步状态
+                for related_event in related_events:
+                    # 检查是否已经在同一个事件组
+                    if related_event.event_group_id != event.event_group_id:
+                        # 合并事件组
+                        if not event.event_group_id:
+                            # 创建新的事件组
+                            from datetime import datetime
+                            new_event_group = EventGroup(created_at=datetime.now())
+                            db.session.add(new_event_group)
+                            db.session.flush()
+                            event.event_group_id = new_event_group.id
+                            event.sync_status = 'synced'
+                            event.last_synced_at = datetime.now()
+                        
+                        # 将相关事件关联到同一个事件组
+                        related_event.event_group_id = event.event_group_id
+                        related_event.sync_status = 'synced'
+                        related_event.last_synced_at = datetime.now()
+                        
+                        # 创建同步评论
+                        sync_comment = EventComment(
+                            event_id=related_event.id,
+                            user_id=current_user.id,
+                            content=f"[自动同步] 来自事件 {event.id} 的评论: {comment_content}",
+                            is_sync_comment=True,
+                            sync_reference=f"sync_{event.id}_{new_comment.id}"
+                        )
+                        db.session.add(sync_comment)
+        
+        # 执行同步逻辑
+        sync_related_events()
+        
         return new_comment
 
     def success_response(comment):
@@ -1658,6 +1741,96 @@ def get_network_data():
     )
 
 
+@app.route('/api/events/connections')
+@login_required
+def get_event_connections():
+    """获取事件连接关系，识别共同事件的路由"""
+    def get_connections_operation():
+        # 1. 获取当前用户的所有事件
+        from sqlalchemy import or_
+        user_events = SharedEvent.query.filter(
+            or_(
+                SharedEvent.user_id == current_user.id,
+                SharedEvent.participants.contains(current_user)
+            )
+        ).all()
+        
+        # 2. 按事件组分组事件
+        event_groups = {}
+        for event in user_events:
+            if event.event_group_id:
+                if event.event_group_id not in event_groups:
+                    event_groups[event.event_group_id] = []
+                event_groups[event.event_group_id].append(event)
+        
+        # 3. 构建事件连接路由
+        connections = []
+        routes = []
+        
+        for group_id, events in event_groups.items():
+            if len(events) > 1:
+                # 对于每个事件组，创建事件之间的连接
+                for i in range(len(events)):
+                    for j in range(i + 1, len(events)):
+                        event1 = events[i]
+                        event2 = events[j]
+                        
+                        # 创建事件连接
+                        connection = {
+                            'event1': {
+                                'id': event1.id,
+                                'title': f"与 {event1.friend_name} 在 {event1.world.world_name}",
+                                'start_time': event1.start_time.isoformat(),
+                                'end_time': event1.end_time.isoformat() if event1.end_time else None,
+                                'user_id': event1.user_id
+                            },
+                            'event2': {
+                                'id': event2.id,
+                                'title': f"与 {event2.friend_name} 在 {event2.world.world_name}",
+                                'start_time': event2.start_time.isoformat(),
+                                'end_time': event2.end_time.isoformat() if event2.end_time else None,
+                                'user_id': event2.user_id
+                            },
+                            'connection_type': 'shared_event_group',
+                            'group_id': group_id,
+                            'sync_hash': event1.sync_hash if event1.sync_hash else 'no_sync_hash'
+                        }
+                        connections.append(connection)
+                
+                # 构建路由
+                route = {
+                    'group_id': group_id,
+                    'events': [{
+                        'id': event.id,
+                        'title': f"与 {event.friend_name} 在 {event.world.world_name}",
+                        'start_time': event.start_time.isoformat(),
+                        'end_time': event.end_time.isoformat() if event.end_time else None,
+                        'user_id': event.user_id,
+                        'sync_status': event.sync_status
+                    } for event in events],
+                    'connections': [{
+                        'event1_id': connections[i]['event1']['id'],
+                        'event2_id': connections[i]['event2']['id']
+                    } for i in range(len(connections)) if connections[i]['group_id'] == group_id]
+                }
+                routes.append(route)
+        
+        return {
+            'connections': connections,
+            'routes': routes,
+            'total_groups': len(event_groups),
+            'total_connections': len(connections)
+        }
+    
+    def success_response(result):
+        return jsonify({'success': True, 'data': result})
+    
+    return handle_api_db_operation(
+        operation_func=get_connections_operation,
+        success_response_func=success_response
+    )
+
+
 # ------------------------------
 # 事件提醒路由
 # ------------------------------
@@ -1844,6 +2017,13 @@ def stats():
 def visualization_page():
     """高级可视化页面"""
     return render_template('visualization.html')
+
+
+@app.route('/event-connections')
+@login_required
+def event_connections_page():
+    """事件连接关系展示页面"""
+    return render_template('event_connections.html')
 
 
 # ------------------------------
@@ -2154,7 +2334,15 @@ def convert_game_logs():
 
             if log.event_type == '位置变动':
                 # 当前用户加入世界，记录世界信息
-                pass  # 已经处理了世界会话初始化
+                # 确保player_name是当前用户自己
+                if player_name == current_user.username:
+                    # 处理当前用户加入世界的逻辑
+                    # 确保当前用户不在玩家列表中，避免重复
+                    if player_name not in world_session['players']:
+                        world_session['players'][player_name] = {
+                            'start_time': log.timestamp,
+                            'is_friend': False
+                        }
 
             elif log.event_type == '玩家加入':
                 # 记录玩家加入时间和好友状态
@@ -2163,40 +2351,48 @@ def convert_game_logs():
                     'is_friend': log.is_friend
                 }
 
-            elif log.event_type == '玩家离开' and player_name in world_session['players']:
-                # 玩家离开，创建SharedEvent
-                player_info = world_session['players'].pop(player_name)
+            elif log.event_type == '玩家离开':
+                # 1. 只有当离开的玩家不是当前用户自己时，才可能创建事件
+                if player_name != current_user.username:
+                    # 2. 确保player_name在world_session['players']中
+                    if player_name in world_session['players']:
+                        # 玩家离开，创建SharedEvent
+                        player_info = world_session['players'].pop(player_name)
 
-                # 计算持续时间
-                duration = int(
-                    (log.timestamp - player_info['start_time']).total_seconds())
+                        # 计算持续时间
+                        duration = int(
+                            (log.timestamp - player_info['start_time']).total_seconds())
 
-                # 查找或创建世界
-                world = get_or_create_world(world_session['world_name'], '')
+                        # 查找或创建世界
+                        world = get_or_create_world(world_session['world_name'], '')
 
-                # 创建SharedEvent
-                event = SharedEvent(
-                    user_id=current_user.id,
-                    world_id=world.id,
-                    friend_name=player_name,
-                    start_time=player_info['start_time'],
-                    end_time=log.timestamp,
-                    duration=duration
-                )
+                        # 创建SharedEvent
+                        event = SharedEvent(
+                            user_id=current_user.id,
+                            world_id=world.id,
+                            friend_name=player_name,
+                            start_time=player_info['start_time'],
+                            end_time=log.timestamp,
+                            duration=duration
+                        )
 
-                # 添加参与者：当前用户和对方玩家（如果是注册用户）
-                event.participants.append(current_user)
-                if player_name in username_to_user:
-                    other_user = username_to_user[player_name]
-                    event.participants.append(other_user)
+                        # 添加参与者：当前用户和对方玩家（如果是注册用户）
+                        event.participants.append(current_user)
+                        if player_name in username_to_user:
+                            other_user = username_to_user[player_name]
+                            event.participants.append(other_user)
 
-                    # 确保好友关系正确
-                    if player_info['is_friend'] and other_user not in current_user.friends:
-                        current_user.friends.append(other_user)
-                        other_user.friends.append(current_user)
+                            # 确保好友关系正确
+                            if player_info['is_friend'] and other_user not in current_user.friends:
+                                current_user.friends.append(other_user)
+                                other_user.friends.append(current_user)
 
-                db.session.add(event)
-                converted_count += 1
+                        db.session.add(event)
+                        converted_count += 1
+                else:
+                    # 如果离开的是当前用户自己，从玩家列表中移除自己（如果存在）
+                    if player_name in world_session['players']:
+                        world_session['players'].pop(player_name)
 
         # 4. 为当前用户处理自己的加入和离开事件
         # 跟踪当前用户在每个世界的会话
@@ -2223,9 +2419,13 @@ def convert_game_logs():
                     # 查找该世界中当前用户离开时的其他玩家
                     if world_key in world_sessions:
                         world_session = world_sessions[world_key]
-                        # 为每个仍在世界中的玩家创建事件
+                        # 为每个仍在世界中的玩家创建事件，但排除当前用户自己
                         for other_player_name, other_player_info in world_session['players'].items(
                         ):
+                            # 跳过当前用户自己
+                            if other_player_name == current_user.username:
+                                continue
+                                
                             # 计算重叠时间
                             overlap_start = max(
                                 session['start_time'], other_player_info['start_time'])

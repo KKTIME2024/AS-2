@@ -106,6 +106,67 @@
         </div>
     </section>
 
+    <!-- 操作区域 -->
+    <section class="actions-section mb-4" role="toolbar" aria-label="事件操作工具">
+        <div class="d-flex justify-content-end gap-2">
+            <!-- 打开创建事件模态框按钮 -->
+            <button type="button" 
+               class="btn btn-primary btn-lg"
+               data-bs-toggle="modal" 
+               data-bs-target="#createEventModal"
+               aria-label="创建新事件">
+                <i class="bi bi-plus-circle me-2"></i> 创建新事件
+            </button>
+        </div>
+    </section>
+
+    <!-- 创建事件模态框 -->
+    <div class="modal fade" id="createEventModal" tabindex="-1" aria-labelledby="createEventModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createEventModalLabel">创建新事件</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 创建事件表单 -->
+                    <form action="{{ url_for('create_event') }}" method="POST">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="friend_name" class="form-label">好友名称</label>
+                                <input type="text" class="form-control" id="friend_name" name="friend_name" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="world_name" class="form-label">世界名称</label>
+                                <input type="text" class="form-control" id="world_name" name="world_name" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="world_tags" class="form-label">世界标签（可选）</label>
+                                <input type="text" class="form-control" id="world_tags" name="world_tags" placeholder="例如：Social,Music,Dance">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="start_time" class="form-label">开始时间</label>
+                                <input type="datetime-local" class="form-control" id="start_time" name="start_time" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="end_time" class="form-label">结束时间</label>
+                                <input type="datetime-local" class="form-control" id="end_time" name="end_time" required>
+                            </div>
+                            <div class="col-12">
+                                <label for="notes" class="form-label">备注（可选）</label>
+                                <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer mt-4">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="submit" class="btn btn-primary">创建事件</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 事件列表区域 -->
     <section class="events-section" role="region" aria-labelledby="events-heading">
         <h2 id="events-heading" class="visually-hidden">事件列表</h2>
@@ -118,8 +179,21 @@
                             <div class="card-body">
                                 <header class="card-header">
                                     <h3 class="card-title h5">
-                                        与 <span class="friend-name">{{ event.friend_name }}</span> 
-                                        在 <span class="world-name">{{ event.world.world_name }}</span>
+                                        {% if current_user.username == event.friend_name %}
+                                            <!-- 当前用户是事件的friend_name，显示其他参与者 -->
+                                            与 
+                                            {% for participant in event.participants %}
+                                                {% if participant.username != current_user.username %}
+                                                    <span class="friend-name">{{ participant.username }}</span>
+                                                    {% if not loop.last %}, {% endif %}
+                                                {% endif %}
+                                            {% endfor %}
+                                            在 <span class="world-name">{{ event.world.world_name }}</span>
+                                        {% else %}
+                                            <!-- 正常显示 -->
+                                            与 <span class="friend-name">{{ event.friend_name }}</span> 
+                                            在 <span class="world-name">{{ event.world.world_name }}</span>
+                                        {% endif %}
                                     </h3>
                                 </header>
                                 

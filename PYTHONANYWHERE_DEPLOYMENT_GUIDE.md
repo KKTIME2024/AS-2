@@ -1,163 +1,138 @@
 # PythonAnywhere部署指南
 
-## 1. 问题分析
-根据您提供的PythonAnywhere仪表盘信息，当前存在一个主要问题：
-- 虚拟环境 `/home/KKTIME2024/.virtualenvs/VRC-MEM-KEEPER` 使用的是 Python 3.10
-- 但Web应用配置的是 Python 3.13
-- 这导致了虚拟环境设置问题，需要重新创建正确版本的虚拟环境
+本指南将详细介绍如何将VRChat Memories项目部署到PythonAnywhere平台。
 
-## 2. 解决方案步骤
+## 1. 登录到PythonAnywhere
 
-### 步骤1：登录PythonAnywhere控制台
 1. 访问 [PythonAnywhere](https://www.pythonanywhere.com/)
-2. 登录您的账号 `KKTIME2024`
-3. 点击顶部导航栏的 "Consoles" 选项
-4. 选择 "Bash" 控制台
+2. 使用您的账号登录
 
-### 步骤2：创建正确Python版本的虚拟环境
-在Bash控制台中执行以下命令：
+## 2. 创建新的Web应用
 
-```bash
-# 删除旧的虚拟环境（可选，如果想保留旧环境可以跳过）
-rm -rf /home/KKTIME2024/.virtualenvs/VRC-MEM-KEEPER
+1. 在控制面板中，点击 "Web" 标签
+2. 点击 "Add a new web app" 按钮
+3. 选择 "Manual configuration"（手动配置）
+4. 选择适合的Python版本（建议3.9或更高版本）
+5. 点击 "Next" 完成创建
 
-# 创建新的虚拟环境，指定Python 3.13版本
-mkvirtualenv --python=/usr/bin/python3.13 VRC-MEM-KEEPER
+## 3. 克隆GitHub仓库
 
-# 激活虚拟环境
-source /home/KKTIME2024/.virtualenvs/VRC-MEM-KEEPER/bin/activate
-```
-
-### 步骤3：安装项目依赖
-
-```bash
-# 进入项目目录
-cd /home/KKTIME2024/AS-2
-
-# 安装requirements.txt中的依赖
-pip install -r requirements.txt
-```
-
-### 步骤4：配置WSGI文件
-
-1. 回到PythonAnywhere仪表盘
-2. 点击顶部导航栏的 "Web" 选项
-3. 找到 "WSGI configuration file"，点击链接 `/var/www/kktime2024_pythonanywhere_com_wsgi.py`
-4. 确保WSGI文件内容正确，应该类似于：
-
-```python
-import sys
-import os
-
-# 加入项目路径
-path = '/home/KKTIME2024/AS-2'
-if path not in sys.path:
-    sys.path.append(path)
-
-# 设置环境变量
-os.environ['FLASK_APP'] = 'app.py'
-os.environ['FLASK_ENV'] = 'production'
-os.environ['SECRET_KEY'] = 'your-secret-key-here'  # 替换为您的密钥
-
-# 导入Flask应用
-from app import app as application
-```
-
-### 步骤5：重新加载Web应用
-
-1. 回到PythonAnywhere仪表盘的Web应用页面
-2. 点击页面顶部的 "Reload kktime2024.pythonanywhere.com" 按钮
-3. 等待几秒钟，系统会重新加载您的应用
-
-### 步骤6：检查虚拟环境配置
-
-1. 回到Web应用配置页面
-2. 找到 "Virtualenv" 部分
-3. 确认虚拟环境路径为 `/home/KKTIME2024/.virtualenvs/VRC-MEM-KEEPER`
-4. 确认不再显示Python版本不匹配的错误
-
-### 步骤7：验证部署
-
-1. 打开浏览器，访问 `https://kktime2024.pythonanywhere.com`
-2. 检查应用是否正常运行
-3. 如果遇到问题，查看日志文件：
-   - Access log: `kktime2024.pythonanywhere.com.access.log`
-   - Error log: `kktime2024.pythonanywhere.com.error.log`
-   - Server log: `kktime2024.pythonanywhere.com.server.log`
-
-## 3. 常见问题排查
-
-### 问题1：虚拟环境创建失败
-- 确保Python 3.13路径正确：`/usr/bin/python3.13`
-- 检查磁盘空间是否充足
-- 尝试使用 `python3.13 -m venv /home/KKTIME2024/.virtualenvs/VRC-MEM-KEEPER` 命令创建虚拟环境
-
-### 问题2：依赖安装失败
-- 确保虚拟环境已正确激活
-- 尝试更新pip：`pip install --upgrade pip`
-- 检查requirements.txt文件是否有语法错误
-
-### 问题3：应用无法访问
-- 检查WSGI文件配置是否正确
-- 查看错误日志，寻找具体错误信息
-- 确保静态文件路径配置正确
-
-### 问题4：数据库连接问题
-- 如果使用SQLite，确保数据库文件路径正确
-- 如果使用其他数据库，确保连接字符串配置正确
-
-## 4. 维护与更新
-
-### 定期更新
-1. 登录PythonAnywhere控制台
-2. 拉取最新代码：
+1. 在控制面板中，点击 "Consoles" 标签
+2. 点击 "Bash" 打开一个新的终端
+3. 执行以下命令克隆仓库：
    ```bash
-   cd /home/KKTIME2024/AS-2
-   git pull origin main
+   git clone https://github.com/KKTIME2024/AS-2.git
    ```
-3. 激活虚拟环境并更新依赖：
+4. 进入项目目录：
    ```bash
-   source /home/KKTIME2024/.virtualenvs/VRC-MEM-KEEPER/bin/activate
+   cd AS-2
+   ```
+
+## 4. 设置虚拟环境
+
+1. 创建虚拟环境：
+   ```bash
+   python -m venv venv
+   ```
+2. 激活虚拟环境：
+   ```bash
+   source venv/bin/activate
+   ```
+
+## 5. 安装依赖
+
+1. 安装项目依赖：
+   ```bash
    pip install -r requirements.txt
    ```
-4. 重新加载Web应用
 
-### 保持应用活跃
-- 免费账号需要每3个月登录一次，点击 "Run until 3 months from today" 按钮
-- 系统会在到期前一周发送提醒邮件
+## 6. 配置WSGI文件
 
-## 5. 高级配置
+1. 在PythonAnywhere控制面板中，回到 "Web" 标签
+2. 在 "Code" 部分，找到 "WSGI configuration file" 并点击链接打开它
+3. 将WSGI文件内容替换为：
+   ```python
+   import sys
+   import os
+   
+   # 添加项目路径到系统路径
+   path = '/home/[your-username]/AS-2'
+   if path not in sys.path:
+       sys.path.append(path)
+   
+   # 激活虚拟环境
+   activate_this = '/home/[your-username]/AS-2/venv/bin/activate_this.py'
+   with open(activate_this) as file_:
+       exec(file_.read(), dict(__file__=activate_this))
+   
+   # 设置环境变量
+   os.chdir(path)
+   os.environ['FLASK_APP'] = 'app.py'
+   os.environ['FLASK_ENV'] = 'production'
+   
+   # 导入Flask应用
+   from app import app as application
+   ```
+   注意：将 `[your-username]` 替换为您的PythonAnywhere用户名
 
-### 添加自定义域名
-1. 购买域名并配置DNS记录指向PythonAnywhere
-2. 在PythonAnywhere仪表盘添加自定义域名
-3. 等待HTTPS证书自动配置
+## 7. 设置数据库
 
-### 设置环境变量
-- 在WSGI文件中添加环境变量
-- 或使用 `.env` 文件（需要安装 `python-dotenv` 库）
+1. 在项目目录中，执行以下命令初始化数据库：
+   ```bash
+   python -c "from app import app, db; with app.app_context(): db.create_all()"
+   ```
 
-### 配置数据库备份
-- 定期备份数据库文件
-- 对于SQLite，直接复制 `.db` 文件
-- 对于其他数据库，使用数据库特定的备份命令
+## 8. 配置静态文件（可选）
 
-## 6. 联系支持
+如果您的项目有静态文件，需要在PythonAnywhere中配置：
 
-如果遇到无法解决的问题：
-1. 查看PythonAnywhere [帮助文档](https://help.pythonanywhere.com/)
-2. 访问PythonAnywhere [论坛](https://www.pythonanywhere.com/forums/)
-3. 联系PythonAnywhere支持团队
+1. 在 "Web" 标签的 "Static files" 部分，点击 "Add a new static file mapping"
+2. 设置URL路径为 `/static/`
+3. 设置目录路径为 `/home/[your-username]/AS-2/static`
+4. 点击 "Save"
 
-## 7. 部署完成检查清单
+## 9. 重启Web应用
 
-- [ ] 虚拟环境创建成功，Python版本正确
-- [ ] 依赖安装完成
-- [ ] WSGI文件配置正确
-- [ ] Web应用重新加载
-- [ ] 应用可以正常访问
-- [ ] 静态文件可以正常加载
-- [ ] 数据库连接正常
-- [ ] 错误日志无严重错误
+1. 在 "Web" 标签中，点击 "Reload [your-username].pythonanywhere.com"
+2. 等待几分钟后，访问您的网站：`https://[your-username].pythonanywhere.com`
 
-祝您部署顺利！
+## 10. 定期更新部署
+
+当您在本地对项目进行修改并推送到GitHub后，需要在PythonAnywhere上更新：
+
+1. 打开Bash终端
+2. 进入项目目录：`cd AS-2`
+3. 拉取最新代码：`git pull origin main`
+4. 激活虚拟环境：`source venv/bin/activate`
+5. 安装新的依赖（如果有）：`pip install -r requirements.txt`
+6. 更新数据库（如果有）：`python -c "from app import app, db; with app.app_context(): db.create_all()"`
+7. 重启Web应用：在Web标签中点击 "Reload"
+
+## 注意事项
+
+1. 确保在WSGI文件中正确设置了所有路径
+2. 首次访问网站时，可能需要等待几分钟才能正常运行
+3. 如果遇到问题，可以查看PythonAnywhere的错误日志
+4. 建议在生产环境中更改Flask应用的SECRET_KEY
+
+## 常见问题排查
+
+### 1. 网站显示500错误
+
+- 查看错误日志：在Web标签中，找到 "Error log" 并点击查看
+- 检查WSGI文件中的路径是否正确
+- 确保所有依赖都已正确安装
+
+### 2. 数据库连接错误
+
+- 确保数据库文件路径正确
+- 检查数据库初始化命令是否成功执行
+
+### 3. 静态文件无法访问
+
+- 检查静态文件映射是否正确配置
+- 确保静态文件存在于指定目录中
+
+## 联系信息
+
+如果您在部署过程中遇到任何问题，请联系项目维护者。

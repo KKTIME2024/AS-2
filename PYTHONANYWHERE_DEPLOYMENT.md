@@ -77,17 +77,40 @@ python -c "from app import app, db; with app.app_context(): init_data()"
 
 ### 步骤 5: 重新加载应用
 
-在 PythonAnywhere 管理界面的 Web 选项卡中，点击 "Reload" 按钮重新加载应用。
+**注意**：PythonAnywhere 免费账户不支持 CLI 工具，需要通过网页界面重启应用。
+
+1. 登录到 PythonAnywhere 管理界面
+2. 进入 **Web** 选项卡
+3. 点击 "Reload" 按钮重新加载应用
 
 ## 检查状态
 
 ### 查看日志
 如果遇到问题，检查以下日志文件：
-- **Error log**: `/var/log/kktime2024.pythonanywhere.com.error.log`
-- **Access log**: `/var/log/kktime2024.pythonanywhere.com.access.log`
+
+```bash
+# 查看错误日志
+tail -n 50 /var/log/kktime2024.pythonanywhere.com.error.log
+
+# 实时监控错误日志
+tail -f /var/log/kktime2024.pythonanywhere.com.error.log
+
+# 查看访问日志
+tail -n 50 /var/log/kktime2024.pythonanywhere.com.access.log
+```
 
 ### 验证部署
 访问 `https://kktime2024.pythonanywhere.com` 检查应用是否正常运行。
+
+### 数据库验证
+
+```bash
+# 检查数据库文件是否存在
+ls -la /home/KKTIME2024/AS-2/instance/
+
+# 查看数据库中的表结构
+sqlite3 /home/KKTIME2024/AS-2/instance/vrchat_memories.db ".tables"
+```
 
 ## 常见问题
 
@@ -106,8 +129,30 @@ python -c "from app import app, db; with app.app_context(): init_data()"
 ### 3. 静态文件不加载
 确保静态文件映射已正确配置并已重新加载应用。
 
+### 4. "pythonanywhere: command not found" 错误
+PythonAnywhere 免费账户不支持 CLI 工具，所有操作需要通过网页界面完成。
+
 ## 定期维护
 
 - 每 3 个月登录一次 PythonAnywhere 并点击 "Run until 3 months from today" 按钮以保持免费网站运行
 - 定期检查日志以发现和解决问题
 - 更新依赖时重新部署应用
+
+## 修复后的数据库初始化命令
+
+### 正确的数据库初始化命令
+
+```bash
+# 进入项目目录
+cd /home/KKTIME2024/AS-2
+
+# 激活虚拟环境
+source /home/KKTIME2024/.virtualenvs/VRC-MEM-KEEPER/bin/activate
+
+# 使用正确的多行语法初始化数据库
+python - << 'EOF'
+from app import app, db
+with app.app_context():
+    db.create_all()
+EOF
+```

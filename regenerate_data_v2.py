@@ -1,4 +1,4 @@
-from app import app, db, User, World, SharedEvent, GameLog, EventGroup, EventTag, EventLike, user_friends, event_participants
+from app import app, db, User, World, SharedEvent, GameLog, EventGroup, EventTag, EventComment, ActivityFeed, EventReminder, EventShare, user_friends, event_participants
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 
@@ -19,7 +19,10 @@ def regenerate_mock_data():
     print("清除现有数据...")
     db.session.execute(event_participants.delete())
     db.session.execute(user_friends.delete())
-    db.session.query(EventLike).delete()
+    db.session.query(EventComment).delete()
+    db.session.query(EventReminder).delete()
+    db.session.query(EventShare).delete()
+    db.session.query(ActivityFeed).delete()
     db.session.query(EventTag).delete()
     db.session.query(SharedEvent).delete()
     db.session.query(EventGroup).delete()
@@ -428,29 +431,235 @@ def regenerate_mock_data():
 
     # ==================== 从游戏日志生成共享事件 ====================
     print("\n从游戏日志生成共享事件...")
-    from app import convert_game_logs
-    from flask import Flask
-    import sys
-    import os
     from flask_login import login_user
+    
+    # 辅助函数：直接调用转换逻辑，不通过Flask路由
+    def process_user_game_logs(user):
+        from app import GameLog, SharedEvent, get_or_create_world, match_events_to_groups
+        from flask import current_app
+        
+        # 1. 获取当前用户的所有游戏日志
+        game_logs = GameLog.query.filter_by(
+            user_id=user.id).order_by(
+            GameLog.timestamp).all()
 
-    # 模拟Flask请求上下文，以便调用convert_game_logs函数
+        # 2. 获取所有注册用户，用于识别好友关系
+        all_users = User.query.all()
+        username_to_user = {u.username: u for u in all_users}
+
+        # 3. 按世界分组，跟踪每个世界中的玩家会话
+        world_sessions = {}
+        converted_count = 0
+
+        for log in game_logs:
+            world_key = f"{log.world_name}_{log.world_id}"
+            player_name = log.player_name
+
+            # 初始化世界会话
+            if world_key not in world_sessions:
+                world_sessions[world_key] = {
+                    'world_name': log.world_name,
+                    'world_id': log.world_id,
+                    'players': {},  # player_name -> {start_time, is_friend}
+                    'events': []
+                }
+
+            world_session = world_sessions[world_key]
+
+            if log.event_type == '位置变动':
+                # 当前用户加入世界，记录世界信息
+                # 确保player_name是当前用户自己
+                if player_name == user.username:
+                    # 处理当前用户加入世界的逻辑
+                    # 确保当前用户不在玩家列表中，避免重复
+                    if player_name not in world_session['players']:
+                        world_session['players'][player_name] = {
+                            'start_time': log.timestamp,
+                            'is_friend': False
+                        }
+
+            elif log.event_type == '玩家加入':
+                # 记录玩家加入时间和好友状态
+                world_session['players'][player_name] = {
+                    'start_time': log.timestamp,
+                    'is_friend': log.is_friend
+                }
+
+            elif log.event_type == '玩家离开':
+                # 1. 只有当离开的玩家不是当前用户自己时，才可能创建事件
+                if player_name != user.username:
+                    # 2. 确保player_name在world_session['players']中
+                    if player_name in world_session['players']:
+                        # 玩家离开，创建SharedEvent
+                        player_info = world_session['players'].pop(player_name)
+
+                        # 计算持续时间
+                        duration = int(
+                            (log.timestamp - player_info['start_time']).total_seconds())
+
+                        # 查找或创建世界
+                        world = get_or_create_world(world_session['world_name'], '')
+
+                        # 创建SharedEvent
+                        event = SharedEvent(
+                            user_id=user.id,
+                            world_id=world.id,
+                            friend_name=player_name,
+                            start_time=player_info['start_time'],
+                            end_time=log.timestamp,
+                            duration=duration
+                        )
+
+                        # 添加参与者：当前用户和对方玩家（如果是注册用户）
+                        event.participants.append(user)
+                        if player_name in username_to_user:
+                            other_user = username_to_user[player_name]
+                            event.participants.append(other_user)
+
+                            # 确保好友关系正确
+                            if player_info['is_friend'] and other_user not in user.friends:
+                                user.friends.append(other_user)
+                                other_user.friends.append(user)
+
+                        db.session.add(event)
+                        converted_count += 1
+                else:
+                    # 如果离开的是当前用户自己，从玩家列表中移除自己（如果存在）
+                    if player_name in world_session['players']:
+                        world_session['players'].pop(player_name)
+
+        # 4. 为当前用户处理自己的加入和离开事件
+        # 跟踪当前用户在每个世界的会话
+        current_user_sessions = {}
+
+        for log in game_logs:
+            world_key = f"{log.world_name}_{log.world_id}"
+            player_name = log.player_name
+
+            # 只处理当前用户自己的位置变动事件
+            if log.event_type == '位置变动' and player_name == user.username:
+                # 当前用户加入世界
+                current_user_sessions[world_key] = {
+                    'start_time': log.timestamp,
+                    'world_name': log.world_name,
+                    'world_id': log.world_id
+                }
+
+            # 当前用户离开世界（当看到自己的离开事件时）
+            elif log.event_type == '玩家离开' and player_name == user.username:
+                if world_key in current_user_sessions:
+                    session = current_user_sessions.pop(world_key)
+
+                    # 查找该世界中当前用户离开时的其他玩家
+                    if world_key in world_sessions:
+                        world_session = world_sessions[world_key]
+                        # 为每个仍在世界中的玩家创建事件，但排除当前用户自己
+                        for other_player_name, other_player_info in world_session['players'].items(
+                        ):
+                            # 跳过当前用户自己
+                            if other_player_name == user.username:
+                                continue
+                                
+                            # 计算重叠时间
+                            overlap_start = max(
+                                session['start_time'], other_player_info['start_time'])
+                            overlap_end = log.timestamp
+
+                            if overlap_start < overlap_end:
+                                duration = int(
+                                    (overlap_end - overlap_start).total_seconds())
+
+                                # 查找或创建世界
+                                world = get_or_create_world(
+                                    session['world_name'], '')
+
+                                # 创建SharedEvent
+                                event = SharedEvent(
+                                    user_id=user.id,
+                                    world_id=world.id,
+                                    friend_name=other_player_name,
+                                    start_time=overlap_start,
+                                    end_time=overlap_end,
+                                    duration=duration
+                                )
+
+                                # 添加参与者
+                                event.participants.append(user)
+                                if other_player_name in username_to_user:
+                                    other_user = username_to_user[other_player_name]
+                                    event.participants.append(other_user)
+
+                                    # 确保好友关系正确
+                                    if other_player_info['is_friend'] and other_user not in user.friends:
+                                        user.friends.append(other_user)
+                                        other_user.friends.append(user)
+
+                                db.session.add(event)
+                                converted_count += 1
+
+        # 5. 将新创建的事件匹配到事件组
+        match_events_to_groups()
+        
+        return converted_count
+
+    # 为每个用户生成共享事件
     for username, user in users.items():
         print(f'\n为 {username} 生成共享事件...')
-
-        # 调用转换函数
         try:
-            # 创建请求上下文
-            with app.test_request_context('/api/gamelog/convert', method='POST'):
-                # 设置当前用户
-                login_user(user)
-                # 调用转换函数
-                result = convert_game_logs()
-                print(f'  ✅ 为 {username} 生成了 {result} 个共享事件')
+            count = process_user_game_logs(user)
+            print(f'  ✅ 为 {username} 生成了 {count} 个共享事件')
         except Exception as e:
-            print(f'  ❌ 为 {username} 生成共享事件时出错: {e}')
+            print(f'  ❌ 生成失败: {str(e)}')
             import traceback
             traceback.print_exc()
+    
+    # 清理重复事件和错误事件
+    print("\n清理重复事件和错误事件...")
+    try:
+        # 删除所有用户与自己的事件
+        all_events = SharedEvent.query.all()
+        cleaned_count = 0
+        
+        for event in all_events:
+            # 获取事件的参与者用户名列表
+            participant_usernames = [p.username for p in event.participants]
+            
+            # 删除条件：
+            # 1. 如果friend_name是当前事件的创建者用户名
+            # 2. 或者如果参与者中只有当前用户自己
+            # 3. 或者如果事件中没有其他参与者
+            if (event.friend_name == users[event.user.username].username) or \
+               (len(participant_usernames) == 1 and participant_usernames[0] == event.user.username) or \
+               (len(participant_usernames) == 0):
+                print(f"  删除错误事件: {event.user.username} 与 {event.friend_name} 在 {event.world.world_name}")
+                db.session.delete(event)
+                cleaned_count += 1
+        
+        db.session.commit()
+        print(f"  共清理 {cleaned_count} 个错误事件")
+        
+        # 重新匹配事件组
+        print("\n重新匹配事件组...")
+        from app import match_events_to_groups
+        match_events_to_groups()
+        print("  事件组匹配完成！")
+        
+        # 验证清理结果
+        print("\n验证清理结果...")
+        all_events = SharedEvent.query.all()
+        print(f"  清理后剩余 {len(all_events)} 个事件")
+        for event in all_events:
+            participant_usernames = [p.username for p in event.participants]
+            if event.friend_name == event.user.username:
+                print(f"  ❌ 仍然存在错误事件: {event.user.username} 与 {event.friend_name} 在 {event.world.world_name}")
+            elif len(participant_usernames) == 1 and participant_usernames[0] == event.user.username:
+                print(f"  ❌ 仍然存在错误事件: {event.user.username} 与 {event.friend_name} 在 {event.world.world_name}（只有自己）")
+        print("  验证完成！")
+        
+    except Exception as e:
+        print(f"  ❌ 清理失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
     # 提交所有转换生成的事件
     db.session.commit()
