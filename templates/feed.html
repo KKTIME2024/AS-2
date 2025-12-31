@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <article class="friends-stats-page" role="article" aria-label="好友数据总览">
+    <article class="friends-stats-page" role="article" aria-label="好友时光回忆">
         <header class="page-header mb-4" role="banner">
-            <h1 class="mb-2">好友数据总览</h1>
+            <h1 class="mb-2">好友时光回忆</h1>
             <nav aria-label="面包屑导航" class="breadcrumb-nav">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="{{ url_for('index') }}">时间线</a></li>
-                    <li class="breadcrumb-item active" aria-current="page">好友数据</li>
+                    <li class="breadcrumb-item active" aria-current="page">好友回忆</li>
                 </ol>
             </nav>
         </header>
@@ -17,14 +17,14 @@
                 <!-- 好友列表和数据 -->
                 <section class="card shadow-sm mb-4" role="region" aria-labelledby="friends-list">
                     <div class="card-body">
-                        <h2 id="friends-list" class="card-title h5 mb-3">好友游玩数据</h2>
+                        <h2 id="friends-list" class="card-title h5 mb-3">与好友的美好时光</h2>
                         
                         <div id="friends-stats-container" class="friends-stats-list">
                             <div class="text-center my-5">
                                 <div class="spinner-border" role="status">
-                                    <span class="visually-hidden">加载中...</span>
+                                    <span class="visually-hidden">正在回忆中...</span>
                                 </div>
-                                <p class="mt-2">正在加载好友数据...</p>
+                                <p class="mt-2">正在整理与好友的美好回忆...</p>
                             </div>
                         </div>
                     </div>

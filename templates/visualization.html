@@ -3,12 +3,12 @@
 {% block content %}
     <article class="visualization-page" role="article" aria-label="数据视图">
         <header class="page-header mb-6 text-center" role="banner">
-            <h1 class="display-5 fw-bold text-gradient mb-3">📊 数据视图</h1>
-            <p class="lead text-muted mb-4">探索您的VRChat互动数据，发现隐藏的模式和趋势</p>
+            <h1 class="display-5 fw-bold text-gradient mb-3">时光印记</h1>
+            <p class="lead text-muted mb-4">重温您的VRChat美好时光，细数那些珍贵的相遇与陪伴</p>
             <nav aria-label="面包屑导航" class="breadcrumb-nav d-flex justify-content-center">
                 <ol class="breadcrumb bg-light rounded-pill p-2 shadow-sm">
                     <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none text-primary">时间线</a></li>
-                    <li class="breadcrumb-item active" aria-current="page" style="color: #6c757d;">数据视图</li>
+                    <li class="breadcrumb-item active" aria-current="page" style="color: #6c757d;">时光印记</li>
                 </ol>
             </nav>
         </header>
@@ -29,17 +29,7 @@
                                 style="border: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); transition: all 0.3s ease;">
                             <i class="bi bi-clock-history me-2"></i> 时间线视图
                         </button>
-                        <button class="nav-link rounded-10 px-4 py-3 mx-1" 
-                                id="network-tab" 
-                                data-bs-toggle="tab" 
-                                data-bs-target="#network-content" 
-                                type="button" 
-                                role="tab" 
-                                aria-controls="network-content" 
-                                aria-selected="false" 
-                                style="border: none; background: #f8f9fa; color: #6c757d; transition: all 0.3s ease;">
-                            <i class="bi bi-globe me-2"></i> 社交网络图
-                        </button>
+    
                     </div>
                 </nav>
                 <div class="tab-content mt-4" id="visualization-tab-content">
@@ -47,39 +37,22 @@
                     <div class="tab-pane fade show active" id="timeline-content" role="tabpanel" aria-labelledby="timeline-tab">
                         <div class="card shadow-lg border-0 rounded-12 overflow-hidden" style="border-radius: 12px;">
                             <div class="card-header bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4">
-                                <h2 class="card-title h4 mb-0 fw-semibold">事件时间线</h2>
+                                <h2 class="card-title h4 mb-0 fw-semibold">美好时光记录</h2>
                             </div>
                             <div class="card-body p-5">
                                 <div id="timeline-container" class="timeline-visualization" style="height: 600px;">
                                     <div class="text-center my-5">
                                         <div class="spinner-border" role="status" style="width: 3rem; height: 3rem; color: #667eea;">
-                                            <span class="visually-hidden">加载中...</span>
+                                            <span class="visually-hidden">正在梳理回忆...</span>
                                         </div>
-                                        <p class="mt-3 text-muted">正在加载时间线数据...</p>
+                                        <p class="mt-3 text-muted">正在梳理您的美好回忆...</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- 社交网络图视图 -->
-                    <div class="tab-pane fade" id="network-content" role="tabpanel" aria-labelledby="network-tab">
-                        <div class="card shadow-lg border-0 rounded-12 overflow-hidden" style="border-radius: 12px;">
-                            <div class="card-header bg-gradient-to-r from-teal-500 to-cyan-600 text-white p-4">
-                                <h2 class="card-title h4 mb-0 fw-semibold">社交网络图</h2>
-                            </div>
-                            <div class="card-body p-5">
-                                <div id="network-container" class="network-visualization" style="height: 600px;">
-                                    <div class="text-center my-5">
-                                        <div class="spinner-border" role="status" style="width: 3rem; height: 3rem; color: #4ecdc4;">
-                                            <span class="visually-hidden">加载中...</span>
-                                        </div>
-                                        <p class="mt-3 text-muted">正在加载社交网络数据...</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+
                 </div>
             </div>
         </div>
@@ -246,9 +219,9 @@
                                     label: function(context) {
                                         const item = data[context.dataIndex];
                                         return [
-                                            `👤 与: ${item.friend}`,
-                                            `🌍 世界: ${item.world}`,
-                                            `⏰ 持续时间: ${(item.duration / 3600).toFixed(2)} 小时`
+                                            `与: ${item.friend}`,
+                                            `世界: ${item.world}`,
+                                            `持续时间: ${(item.duration / 3600).toFixed(2)} 小时`
                                         ];
                                     }
                                 }
@@ -275,242 +248,12 @@
                 });
             }
             
-            // 社交网络图可视化
-            async function initNetwork() {
-                // 检查缓存
-                if (visCache.network) {
-                    renderNetwork(visCache.network);
-                    return;
-                }
-                
-                try {
-                    const response = await fetch('/api/visualization/network');
-                    if (response.ok) {
-                        const data = await response.json();
-                        // 缓存数据
-                        visCache.network = data.data;
-                        renderNetwork(data.data);
-                    }
-                } catch (error) {
-                    console.error('加载网络数据失败:', error);
-                }
-            }
-            
-            function renderNetwork(data) {
-                const container = document.getElementById('network-container');
-                container.innerHTML = '';
-                
-                // 设置尺寸
-                const width = container.clientWidth;
-                const height = 600;
-                
-                // 创建SVG
-                const svg = d3.select(container)
-                    .append('svg')
-                    .attr('width', width)
-                    .attr('height', height)
-                    .style('background', 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)')
-                    .style('border-radius', '12px')
-                    .style('box-shadow', 'inset 0 2px 4px rgba(0,0,0,0.1)');
-                
-                // 创建力导向图
-                const simulation = d3.forceSimulation(data.nodes)
-                    .force('link', d3.forceLink(data.edges).id(d => d.id).distance(120).strength(0.8))
-                    .force('charge', d3.forceManyBody().strength(-400).distanceMax(300))
-                    .force('center', d3.forceCenter(width / 2, height / 2))
-                    .force('collision', d3.forceCollide().radius(d => {
-                        // 根据节点类型设置不同的半径
-                        if (d.is_current) return 35;
-                        if (d.type === 'friend') return 30;
-                        if (d.type === 'world') return 25;
-                        return 20;
-                    }));
-                
-                // 绘制边
-                const link = svg.append('g')
-                    .attr('class', 'links')
-                    .selectAll('line')
-                    .data(data.edges)
-                    .enter().append('line')
-                    .attr('stroke', d => {
-                        if (d.type === 'friend') return 'rgba(78, 205, 196, 0.7)';
-                        if (d.type === 'world') return 'rgba(102, 126, 234, 0.7)';
-                        return 'rgba(153, 153, 153, 0.7)';
-                    })
-                    .attr('stroke-opacity', 0.8)
-                    .attr('stroke-width', 3)
-                    .attr('stroke-linecap', 'round')
-                    .style('transition', 'stroke-opacity 0.3s ease');
-                
-                // 绘制节点
-                const node = svg.append('g')
-                    .attr('class', 'nodes')
-                    .selectAll('circle')
-                    .data(data.nodes)
-                    .enter().append('circle')
-                    .attr('r', d => {
-                        if (d.is_current) return 35;
-                        if (d.type === 'friend') return 30;
-                        if (d.type === 'world') return 25;
-                        return 20;
-                    })
-                    .attr('fill', d => {
-                        if (d.is_current) return 'radial-gradient(circle, #ff6b6b 0%, #ee5a24 100%)';
-                        if (d.type === 'friend') return 'radial-gradient(circle, #4ecdc4 0%, #45b7d1 100%)';
-                        if (d.type === 'world') return 'radial-gradient(circle, #667eea 0%, #764ba2 100%)';
-                        return 'radial-gradient(circle, #95a5a6 0%, #7f8c8d 100%)';
-                    })
-                    .attr('stroke', '#ffffff')
-                    .attr('stroke-width', 3)
-                    .attr('stroke-linejoin', 'round')
-                    .style('cursor', 'pointer')
-                    .style('filter', 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))')
-                    .on('mouseover', function(event, d) {
-                        // 节点悬停效果
-                        d3.select(this)
-                            .transition()
-                            .duration(200)
-                            .attr('r', function() {
-                                const currentRadius = +d3.select(this).attr('r');
-                                return currentRadius * 1.2;
-                            })
-                            .style('filter', 'drop-shadow(0 8px 12px rgba(0,0,0,0.3))');
-                        
-                        // 高亮相关边
-                        link.filter(edge => edge.source.id === d.id || edge.target.id === d.id)
-                            .transition()
-                            .duration(200)
-                            .attr('stroke-opacity', 1)
-                            .attr('stroke-width', 5);
-                    })
-                    .on('mouseout', function(event, d) {
-                        // 恢复节点大小
-                        d3.select(this)
-                            .transition()
-                            .duration(200)
-                            .attr('r', d => {
-                                if (d.is_current) return 35;
-                                if (d.type === 'friend') return 30;
-                                if (d.type === 'world') return 25;
-                                return 20;
-                            })
-                            .style('filter', 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))');
-                        
-                        // 恢复边样式
-                        link.filter(edge => edge.source.id === d.id || edge.target.id === d.id)
-                            .transition()
-                            .duration(200)
-                            .attr('stroke-opacity', 0.8)
-                            .attr('stroke-width', 3);
-                    })
-                    .call(d3.drag()
-                        .on('start', dragstarted)
-                        .on('drag', dragged)
-                        .on('end', dragended));
-                
-                // 添加节点图标
-                const nodeIcon = svg.append('g')
-                    .attr('class', 'node-icons')
-                    .selectAll('text')
-                    .data(data.nodes)
-                    .enter().append('text')
-                    .text(d => {
-                        if (d.is_current) return '👤';
-                        if (d.type === 'friend') return '🤝';
-                        if (d.type === 'world') return '🌍';
-                        return '📌';
-                    })
-                    .attr('font-size', d => {
-                        if (d.is_current) return '24px';
-                        if (d.type === 'friend') return '20px';
-                        if (d.type === 'world') return '18px';
-                        return '16px';
-                    })
-                    .attr('text-anchor', 'middle')
-                    .attr('dominant-baseline', 'middle')
-                    .style('pointer-events', 'none')
-                    .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))');
-                
-                // 添加节点标签
-                const labels = svg.append('g')
-                    .attr('class', 'labels')
-                    .selectAll('text')
-                    .data(data.nodes)
-                    .enter().append('text')
-                    .text(d => d.name)
-                    .attr('font-size', '14px')
-                    .attr('font-weight', '600')
-                    .attr('text-anchor', 'middle')
-                    .attr('dominant-baseline', 'hanging')
-                    .attr('dy', d => {
-                        if (d.is_current) return '50px';
-                        if (d.type === 'friend') return '42px';
-                        if (d.type === 'world') return '36px';
-                        return '30px';
-                    })
-                    .attr('fill', '#2c3e50')
-                    .style('pointer-events', 'none')
-                    .style('filter', 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))');
-                
-                // 力导向图更新函数
-                simulation.on('tick', () => {
-                    link
-                        .attr('x1', d => d.source.x)
-                        .attr('y1', d => d.source.y)
-                        .attr('x2', d => d.target.x)
-                        .attr('y2', d => d.target.y);
-                    
-                    node
-                        .attr('cx', d => d.x)
-                        .attr('cy', d => d.y);
-                    
-                    nodeIcon
-                        .attr('x', d => d.x)
-                        .attr('y', d => d.y);
-                    
-                    labels
-                        .attr('x', d => d.x)
-                        .attr('y', d => d.y);
-                });
-                
-                // 拖拽事件处理
-                function dragstarted(event, d) {
-                    if (!event.active) simulation.alphaTarget(0.3).restart();
-                    d.fx = d.x;
-                    d.fy = d.y;
-                    
-                    // 拖拽时高亮节点
-                    d3.select(event.currentTarget)
-                        .style('stroke', '#fff')
-                        .style('stroke-width', '5px');
-                }
-                
-                function dragged(event, d) {
-                    d.fx = event.x;
-                    d.fy = event.y;
-                }
-                
-                function dragended(event, d) {
-                    if (!event.active) simulation.alphaTarget(0);
-                    d.fx = null;
-                    d.fy = null;
-                    
-                    // 恢复节点样式
-                    d3.select(event.currentTarget)
-                        .style('stroke', '#fff')
-                        .style('stroke-width', '3px');
-                }
-            }
+
             
             // 延迟初始化可视化
             setTimeout(initTimeline, 100);
             
-            // 选项卡切换事件
-            document.getElementById('visualization-tabs').addEventListener('shown.bs.tab', function(event) {
-                if (event.target.id === 'network-tab') {
-                    initNetwork();
-                }
-            });
+
         });
     </script>
 {% endblock %}

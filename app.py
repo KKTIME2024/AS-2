@@ -683,10 +683,18 @@ def parse_search_query(search_query):
     # 分割搜索词
     search_terms = processed_query.split()
 
-    # 日期格式正则表达式
+    # 日期格式正则表达式 - 支持更多格式
     date_patterns = [
         (r'^(\d{4}-\d{1,2}-\d{1,2})$', '%Y-%m-%d'),  # YYYY-MM-DD
+        (r'^(\d{4}/\d{1,2}/\d{1,2})$', '%Y/%m/%d'),  # YYYY/MM/DD
+        (r'^(\d{4}\.\d{1,2}\.\d{1,2})$', '%Y.%m.%d'),  # YYYY.MM.DD
         (r'^(\d{4}-\d{1,2})$', '%Y-%m'),           # YYYY-MM
+        (r'^(\d{4}/\d{1,2})$', '%Y/%m'),           # YYYY/MM
+        (r'^(\d{4}\.\d{1,2})$', '%Y.%m'),           # YYYY.MM
+        (r'^(\d{2}/\d{2}/\d{4})$', '%d/%m/%Y'),   # DD/MM/YYYY
+        (r'^(\d{1,2}-\d{1,2}-\d{4})$', '%d-%m-%Y'),   # DD-MM-YYYY
+        (r'^(\d{1,2}/\d{1,2})$', '%m/%d'),         # MM/DD
+        (r'^(\d{1,2}-\d{1,2})$', '%m-%d'),         # MM-DD
     ]
 
     # 逐个处理搜索词
@@ -729,13 +737,15 @@ def parse_search_query(search_query):
                         date_obj = datetime.strptime(
                             match.group(1), date_format)
 
-                        if date_format == '%Y-%m-%d':
+                        # 处理具体日期格式 (YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD, DD/MM/YYYY, DD-MM-YYYY)
+                        if any(date_format.endswith(format) for format in ['%Y-%m-%d', '%Y/%m/%d', '%Y.%m.%d', '%d/%m/%Y', '%d-%m-%Y']):
                             # 具体日期，设置为当天
                             if not start_date or date_obj < start_date:
                                 start_date = date_obj
                             if not end_date or date_obj > end_date:
                                 end_date = date_obj
-                        elif date_format == '%Y-%m':
+                        # 处理月份格式 (YYYY-MM, YYYY/MM, YYYY.MM)
+                        elif any(date_format.endswith(format) for format in ['%Y-%m', '%Y/%m', '%Y.%m']):
                             # 月份，设置为该月的第一天和最后一天
                             month_start = date_obj
                             # 计算该月的最后一天
@@ -750,6 +760,15 @@ def parse_search_query(search_query):
                                 start_date = month_start
                             if not end_date or month_end > end_date:
                                 end_date = month_end
+                        # 处理月日格式 (MM/DD, MM-DD)
+                        elif any(date_format.endswith(format) for format in ['%m/%d', '%m-%d']):
+                            # 月日格式，使用当前年份
+                            current_year = datetime.now().year
+                            date_obj = date_obj.replace(year=current_year)
+                            if not start_date or date_obj < start_date:
+                                start_date = date_obj
+                            if not end_date or date_obj > end_date:
+                                end_date = date_obj
                     except ValueError:
                         pass
                     break
@@ -862,9 +881,9 @@ def index():
             # 连接表并应用搜索条件
             filtered_query = filtered_query.join(World)
             filtered_query = filtered_query.outerjoin(EventTag)
-            # 使用OR组合关键词条件，更符合用户搜索习惯
-            filtered_query = filtered_query.filter(or_(*search_conditions))
-            filtered_query = filtered_query.group_by(SharedEvent.id)  # 去重
+            # 多个关键词之间使用AND连接，确保所有关键词都匹配
+            filtered_query = filtered_query.filter(and_(*search_conditions))
+            filtered_query = filtered_query.distinct()  # 正确去重
 
     # 处理日期范围
     if start_date:
@@ -1721,84 +1740,7 @@ def get_timeline_data():
     )
 
 
-@app.route('/api/visualization/network')
-@login_required
-def get_network_data():
-    """获取社交网络图数据"""
-    def get_network_data_operation():
-        # 获取所有事件
-        events = SharedEvent.query.filter(
-            (SharedEvent.user_id == current_user.id) |
-            (SharedEvent.participants.contains(current_user))
-        ).all()
 
-        # 构建节点和边
-        nodes = []
-        edges = []
-        node_set = set()
-
-        # 添加当前用户
-        current_user_node = {
-            'id': current_user.id,
-            'name': current_user.username,
-            'type': 'user',
-            'is_current': True
-        }
-        nodes.append(current_user_node)
-        node_set.add(current_user.username)
-
-        # 添加好友和世界节点
-        for event in events:
-            # 添加好友节点
-            if event.friend_name not in node_set:
-                friend_node = {
-                    'id': f"friend_{event.friend_name}",
-                    'name': event.friend_name,
-                    'type': 'friend'
-                }
-                nodes.append(friend_node)
-                node_set.add(event.friend_name)
-
-            # 添加世界节点
-            if event.world.world_name not in node_set:
-                world_node = {
-                    'id': f"world_{event.world.id}",
-                    'name': event.world.world_name,
-                    'type': 'world'
-                }
-                nodes.append(world_node)
-                node_set.add(event.world.world_name)
-
-            # 添加边：用户-好友
-            user_friend_edge = {
-                'source': current_user.username,
-                'target': event.friend_name,
-                'event_id': event.id,
-                'type': 'friend'
-            }
-            edges.append(user_friend_edge)
-
-            # 添加边：用户-世界
-            user_world_edge = {
-                'source': current_user.username,
-                'target': event.world.world_name,
-                'event_id': event.id,
-                'type': 'world'
-            }
-            edges.append(user_world_edge)
-
-        return {
-            'nodes': nodes,
-            'edges': edges
-        }
-
-    def success_response(result):
-        return jsonify({'success': True, 'data': result})
-
-    return handle_api_db_operation(
-        operation_func=get_network_data_operation,
-        success_response_func=success_response
-    )
 
 
 @app.route('/api/events/connections')
