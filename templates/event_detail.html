@@ -364,12 +364,21 @@
                                 const response = await fetch(`/api/event/${eventId}/comments/${commentId}`, {
                                     method: 'DELETE'
                                 });
-                                if (response.ok) {
+                                
+                                // 获取响应内容
+                                const responseData = await response.json();
+                                
+                                if (response.ok && responseData.success) {
                                     // 重新加载评论
                                     loadComments();
+                                } else {
+                                    // 显示错误信息
+                                    console.error('删除评论失败:', responseData.error || '未知错误');
+                                    alert('删除评论失败: ' + (responseData.error || '未知错误'));
                                 }
                             } catch (error) {
                                 console.error('删除评论失败:', error);
+                                alert('删除评论失败: 网络错误');
                             }
                         }
                     });

@@ -1114,7 +1114,7 @@ def create_comment(event_id):
 @login_required
 def delete_comment(event_id, comment_id):
     """删除事件评论"""
-    event = SharedEvent.query.get_or_404(event_id)
+    # 不需要验证事件存在，只需要验证评论存在
     comment = EventComment.query.get_or_404(comment_id)
 
     # 验证评论所有者
