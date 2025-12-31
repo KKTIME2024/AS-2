@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <article class="feed-page" role="article" aria-label="好友活动动态">
+        <header class="page-header mb-4" role="banner">
+            <h1 class="mb-2">📱 好友动态</h1>
+            <nav aria-label="面包屑导航" class="breadcrumb-nav">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">时间线</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">好友动态</li>
+                </ol>
+            </nav>
+        </header>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <!-- 动态列表 -->
+                <div id="feed-container" class="feed-list">
+                    <div class="text-center my-5">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2">正在加载好友动态...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <!-- 侧边栏信息 -->
+                <aside class="card shadow-sm mb-4" role="complementary" aria-label="动态信息">
+                    <div class="card-body">
+                        <h3 class="card-title h5 mb-3">ℹ️ 动态说明</h3>
+                        <ul class="list-unstyled small">
+                            <li class="mb-2">• 📅 <strong>创建事件</strong> - 好友创建了新事件</li>
+                            <li class="mb-2">• ❤️ <strong>点赞</strong> - 好友点赞了事件</li>
+                            <li class="mb-2">• 💬 <strong>评论</strong> - 好友评论了事件</li>
+                            <li class="mb-2">• 👥 <strong>添加好友</strong> - 好友添加了新好友</li>
+                        </ul>
+                    </div>
+                </aside>
+                
+                <aside class="card shadow-sm" role="complementary" aria-label="好友列表">
+                    <div class="card-body">
+                        <h3 class="card-title h5 mb-3">👥 我的好友</h3>
+                        <ul class="list-unstyled">
+                            {% for friend in current_user.friends.all() %}
+                                <li class="mb-2">
+                                    <a href="#" class="friend-link text-decoration-none">
+                                        {{ friend.username }}
+                                    </a>
+                                </li>
+                            {% else %}
+                                <li class="text-muted">暂无好友</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </article>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 格式化日期
+            function formatDate(dateString) {
+                const date = new Date(dateString);
+                const now = new Date();
+                const diffTime = Math.abs(now - date);
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays === 0) {
+                    return date.toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                } else if (diffDays < 7) {
+                    return `${diffDays}天前`;
+                } else {
+                    return date.toLocaleDateString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
+                }
+            }
+            
+            // 渲染单条动态
+            function renderFeedItem(item) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'feed-item card shadow-sm mb-4';
+                
+                // 根据活动类型渲染不同的内容
+                let activityContent = '';
+                let activityIcon = '';
+                
+                switch (item.activity_type) {
+                    case 'create_event':
+                        activityIcon = '📅';
+                        activityContent = `创建了新事件 <a href="${url_for('event_detail', event_id=item.target_id)}">${item.target_info.title}</a>`;
+                        break;
+                    case 'like':
+                        activityIcon = '❤️';
+                        activityContent = `点赞了事件 <a href="${url_for('event_detail', event_id=item.target_id)}">${item.target_info.title}</a>`;
+                        break;
+                    case 'comment':
+                        activityIcon = '💬';
+                        activityContent = `评论了事件 <a href="${url_for('event_detail', event_id=item.target_info.event_id)}">查看评论</a>: "${item.target_info.content}"`;
+                        break;
+                    default:
+                        activityIcon = '📱';
+                        activityContent = `${item.activity_type}`;
+                }
+                
+                itemDiv.innerHTML = `
+                    <div class="card-body">
+                        <div class="d-flex">
+                            <div class="flex-shrink-0 me-3">
+                                <div class="avatar rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                    ${item.user.username.charAt(0).toUpperCase()}
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h4 class="card-title h6 mb-0">
+                                            <a href="#" class="text-decoration-none">${item.user.username}</a>
+                                        </h4>
+                                        <p class="card-text text-muted small">
+                                            <span class="activity-icon">${activityIcon}</span> ${activityContent}
+                                        </p>
+                                    </div>
+                                    <time class="text-muted small" datetime="${item.created_at}">
+                                        ${formatDate(item.created_at)}
+                                    </time>
+                                </div>
+                                
+                                <!-- 如果有目标信息，显示更多详情 -->
+                                ${item.target_info && item.target_type === 'event' ? `
+                                    <div class="mt-2 p-2 bg-light rounded">
+                                        <p class="mb-1"><strong>世界:</strong> ${item.target_info.world_name}</p>
+                                        <p class="mb-0"><strong>好友:</strong> ${item.target_info.friend_name}</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return itemDiv;
+            }
+            
+            // 加载好友动态
+            async function loadFriendsFeed() {
+                try {
+                    const response = await fetch('/api/feed/friends');
+                    if (response.ok) {
+                        const data = await response.json();
+                        const feedContainer = document.getElementById('feed-container');
+                        
+                        if (data.feed && data.feed.length > 0) {
+                            feedContainer.innerHTML = '';
+                            data.feed.forEach(item => {
+                                const feedItem = renderFeedItem(item);
+                                feedContainer.appendChild(feedItem);
+                            });
+                        } else {
+                            feedContainer.innerHTML = `
+                                <div class="text-center my-5">
+                                    <h4 class="text-muted">暂无好友动态</h4>
+                                    <p class="text-muted mt-2">当您的好友创建事件、点赞或评论时，这里会显示动态</p>
+                                </div>
+                            `;
+                        }
+                    }
+                } catch (error) {
+                    console.error('加载好友动态失败:', error);
+                    const feedContainer = document.getElementById('feed-container');
+                    feedContainer.innerHTML = `
+                        <div class="text-center my-5">
+                            <h4 class="text-danger">加载失败</h4>
+                            <p class="text-muted mt-2">无法加载好友动态，请稍后重试</p>
+                        </div>
+                    `;
+                }
+            }
+            
+            // 初始加载好友动态
+            loadFriendsFeed();
+            
+            // 设置定时刷新（每30秒）
+            setInterval(loadFriendsFeed, 30000);
+        });
+    </script>
+{% endblock %}

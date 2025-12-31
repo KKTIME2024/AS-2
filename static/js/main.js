@@ -488,7 +488,7 @@ function addKeyboardShortcutsHint() {
         <button class="btn btn-sm btn-outline-secondary" 
                 onclick="showKeyboardShortcutsHelp()"
                 aria-label="查看键盘快捷键帮助">
-            <small>快捷键: <kbd>?</kbd></small>
+            <small>快捷键: <kbd>h</kbd></small>
         </button>
     `;
     hint.style.position = 'fixed';

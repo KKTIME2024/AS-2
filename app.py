@@ -18,6 +18,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'  # 设置登录页面
+login_manager.login_message = ''  # 禁用默认登录提示消息
 
 
 # ------------------------------
@@ -59,12 +60,6 @@ class EventGroup(db.Model):
         backref='event_group',
         lazy=True
     )
-    # 关联的点赞
-    likes = db.relationship(
-        'EventLike',
-        backref='event_group',
-        lazy=True
-    )
 
 
 class SharedEvent(db.Model):
@@ -81,6 +76,8 @@ class SharedEvent(db.Model):
     end_time = db.Column(db.DateTime)
     duration = db.Column(db.Integer)  # 持续时间（秒）
     notes = db.Column(db.Text, nullable=True)  # 事件备注
+    # 隐私设置：public, friends, private
+    privacy = db.Column(db.String(20), default='public')
     custom_tags = db.relationship(
         'EventTag',
         backref='event',
@@ -93,12 +90,6 @@ class SharedEvent(db.Model):
         backref=db.backref('participated_events', lazy='dynamic'),
         lazy='dynamic'
     )
-    likes = db.relationship(
-        'EventLike',
-        backref='event',
-        lazy=True,
-        cascade='all, delete-orphan'  # 级联删除
-    )
 
 
 class EventTag(db.Model):
@@ -109,42 +100,6 @@ class EventTag(db.Model):
         primary_key=True
     )
     tag_name = db.Column(db.String(50), primary_key=True)
-
-
-class EventLike(db.Model):
-    """事件点赞模型"""
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(
-        db.Integer,
-        db.ForeignKey(
-            'shared_event.id',
-            ondelete='CASCADE'),
-        nullable=True)  # 改为可空，支持事件组点赞
-    event_group_id = db.Column(
-        db.Integer,
-        db.ForeignKey(
-            'event_group.id',
-            ondelete='CASCADE'),
-        nullable=True)  # 事件组ID
-    user_id = db.Column(
-        db.Integer,
-        db.ForeignKey(
-            'user.id',
-            ondelete='CASCADE'),
-        nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-
-    # 确保每个用户对每个事件或事件组只能点赞一次
-    __table_args__ = (
-        db.UniqueConstraint(
-            'event_id',
-            'user_id',
-            name='_event_user_like_uc'),
-        db.UniqueConstraint(
-            'event_group_id',
-            'user_id',
-            name='_event_group_user_like_uc'),
-    )
 
 
 # 事件参与者关联表（多对多关系）
@@ -178,6 +133,55 @@ user_friends = db.Table('user_friends',
                         db.Column(
                             'created_at', db.DateTime, default=datetime.now)
                         )
+
+
+class EventComment(db.Model):
+    """事件评论模型"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'shared_event.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'user.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    parent_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'event_comment.id',
+            ondelete='CASCADE'),
+        nullable=True)  # 支持回复
+
+    user = db.relationship('User', backref='comments')
+    event = db.relationship('SharedEvent', backref='comments')
+    replies = db.relationship(
+        'EventComment', backref=db.backref(
+            'parent', remote_side=[id]))
+
+
+class ActivityFeed(db.Model):
+    """好友活动动态模型"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'user.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    # create_event, like, comment, etc.
+    activity_type = db.Column(db.String(50), nullable=False)
+    target_id = db.Column(db.Integer, nullable=True)  # 关联的对象ID
+    target_type = db.Column(db.String(50), nullable=True)  # 关联的对象类型
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    user = db.relationship('User', backref='activities')
 
 
 class GameLog(db.Model):
@@ -857,28 +861,6 @@ def index():
     # 按时间倒序获取事件
     events = filtered_query.order_by(SharedEvent.start_time.desc()).all()
 
-    # 为每个事件添加点赞数和当前用户的点赞状态
-    for event in events:
-        if event.event_group_id:
-            # 事件属于某个事件组，计算事件组的点赞数
-            event.like_count = EventLike.query.filter(
-                (EventLike.event_id == event.id) |
-                (EventLike.event_group_id == event.event_group_id)
-            ).count()
-            # 检查当前用户是否点赞了该事件或事件组
-            event.is_liked_by_current_user = EventLike.query.filter(
-                ((EventLike.event_id == event.id) |
-                 (EventLike.event_group_id == event.event_group_id)) &
-                (EventLike.user_id == current_user.id)
-            ).first() is not None
-        else:
-            # 事件不属于任何事件组，计算单个事件的点赞数
-            event.like_count = EventLike.query.filter_by(
-                event_id=event.id).count()
-            # 检查当前用户是否点赞
-            event.is_liked_by_current_user = EventLike.query.filter_by(
-                event_id=event.id, user_id=current_user.id).first() is not None
-
     return render_template(
         'index.html',
         events=events,
@@ -893,26 +875,6 @@ def index():
 def event_detail(event_id):
     """事件详情页面"""
     event = SharedEvent.query.get_or_404(event_id)
-
-    # 计算点赞数
-    if event.event_group_id:
-        # 事件属于某个事件组，计算事件组的点赞数
-        event.like_count = EventLike.query.filter(
-            (EventLike.event_id == event.id) |
-            (EventLike.event_group_id == event.event_group_id)
-        ).count()
-        # 检查当前用户是否点赞了该事件或事件组
-        event.is_liked_by_current_user = EventLike.query.filter(
-            ((EventLike.event_id == event.id) |
-             (EventLike.event_group_id == event.event_group_id)) &
-            (EventLike.user_id == current_user.id)
-        ).first() is not None
-    else:
-        # 事件不属于任何事件组，计算单个事件的点赞数
-        event.like_count = EventLike.query.filter_by(event_id=event.id).count()
-        # 检查当前用户是否点赞
-        event.is_liked_by_current_user = EventLike.query.filter_by(
-            event_id=event.id, user_id=current_user.id).first() is not None
 
     return render_template('event_detail.html', event=event)
 
@@ -978,174 +940,113 @@ def logout():
 # AJAX API路由
 # ------------------------------
 
-@app.route('/api/event/<int:event_id>/like', methods=['POST'])
+
+@app.route('/api/event/<int:event_id>/comments', methods=['GET'])
 @login_required
-def like_event(event_id):
-    """AJAX点赞功能"""
+def get_comments(event_id):
+    """获取事件评论"""
     event = SharedEvent.query.get_or_404(event_id)
 
-    # 使用API错误处理包装的数据库操作
-    def like_event_operation():
-        # 检查用户是否已经点赞了该事件或事件组
-        if event.event_group_id:
-            # 检查是否已经点赞了事件或事件组
-            existing_like = EventLike.query.filter(
-                ((EventLike.event_id == event_id) |
-                 (EventLike.event_group_id == event.event_group_id)) &
-                (EventLike.user_id == current_user.id)
-            ).first()
-            if existing_like:
-                # 用户已经点赞，返回当前点赞数
-                like_count = EventLike.query.filter(
-                    (EventLike.event_id == event_id) |
-                    (EventLike.event_group_id == event.event_group_id)
-                ).count()
-                return like_count
+    def get_comments_operation():
+        # 获取所有顶级评论（没有父评论的评论）
+        top_level_comments = EventComment.query.filter_by(
+            event_id=event_id, parent_id=None).order_by(
+            EventComment.created_at.desc()).all()
 
-            # 创建新的点赞记录，关联到事件组
-            new_like = EventLike(
-                event_group_id=event.event_group_id,
-                user_id=current_user.id
-            )
-        else:
-            # 检查是否已经点赞了事件
-            existing_like = EventLike.query.filter_by(
-                event_id=event_id, user_id=current_user.id).first()
-            if existing_like:
-                # 用户已经点赞，返回当前点赞数
-                like_count = EventLike.query.filter_by(
-                    event_id=event_id).count()
-                return like_count
-
-            # 创建新的点赞记录，关联到事件
-            new_like = EventLike(event_id=event_id, user_id=current_user.id)
-
-        db.session.add(new_like)
-
-        # 计算点赞数
-        if event.event_group_id:
-            like_count = EventLike.query.filter(
-                (EventLike.event_id == event_id) |
-                (EventLike.event_group_id == event.event_group_id)
-            ).count()
-        else:
-            like_count = EventLike.query.filter_by(event_id=event_id).count()
-        return like_count
-
-    # 成功响应函数
-    def success_response(likes):
-        return jsonify({'success': True, 'likes': likes})
-
-    # 调用API错误处理函数
-    return handle_api_db_operation(
-        operation_func=like_event_operation,
-        success_response_func=success_response
-    )
-
-
-@app.route('/api/event/<int:event_id>/like/status', methods=['GET'])
-@login_required
-def get_like_status(event_id):
-    """检查用户是否已经点赞了某个事件"""
-    event = SharedEvent.query.get_or_404(event_id)
-
-    # 使用API错误处理包装的数据库操作
-    def get_like_status_operation():
-        if event.event_group_id:
-            # 检查是否已经点赞了事件或事件组
-            existing_like = EventLike.query.filter(
-                ((EventLike.event_id == event_id) |
-                 (EventLike.event_group_id == event.event_group_id)) &
-                (EventLike.user_id == current_user.id)
-            ).first()
-            is_liked = existing_like is not None
-
-            # 计算事件组的点赞数
-            like_count = EventLike.query.filter(
-                (EventLike.event_id == event_id) |
-                (EventLike.event_group_id == event.event_group_id)
-            ).count()
-        else:
-            # 检查是否已经点赞了事件
-            existing_like = EventLike.query.filter_by(
-                event_id=event_id, user_id=current_user.id).first()
-            is_liked = existing_like is not None
-
-            # 计算事件的点赞数
-            like_count = EventLike.query.filter_by(event_id=event_id).count()
+        # 递归获取评论的回复
+        def serialize_comment(comment):
+            # 对回复进行排序
+            sorted_replies = sorted(
+                comment.replies, key=lambda x: x.created_at)
+            return {
+                'id': comment.id,
+                'content': comment.content,
+                'created_at': comment.created_at.isoformat(),
+                'user': {
+                    'id': comment.user.id,
+                    'username': comment.user.username
+                },
+                'replies': [serialize_comment(reply) for reply in sorted_replies]
+            }
 
         return {
-            'is_liked': is_liked,
-            'likes': like_count
+            'comments': [serialize_comment(comment) for comment in top_level_comments],
+            'total': len(top_level_comments)
         }
 
-    # 成功响应函数
     def success_response(result):
         return jsonify(
-            {'success': True, 'is_liked': result['is_liked'], 'likes': result['likes']})
+            {'success': True, 'comments': result['comments'], 'total': result['total']})
 
-    # 调用API错误处理函数
     return handle_api_db_operation(
-        operation_func=get_like_status_operation,
+        operation_func=get_comments_operation,
         success_response_func=success_response
     )
 
 
-@app.route('/api/event/<int:event_id>/like', methods=['DELETE'])
+@app.route('/api/event/<int:event_id>/comments', methods=['POST'])
 @login_required
-def unlike_event(event_id):
-    """取消点赞功能"""
+def create_comment(event_id):
+    """创建事件评论"""
     event = SharedEvent.query.get_or_404(event_id)
+    data = request.get_json()
 
-    # 使用API错误处理包装的数据库操作
-    def unlike_event_operation():
-        if event.event_group_id:
-            # 查找点赞记录（事件或事件组）
-            existing_like = EventLike.query.filter(
-                ((EventLike.event_id == event_id) |
-                 (EventLike.event_group_id == event.event_group_id)) &
-                (EventLike.user_id == current_user.id)
-            ).first()
-            if not existing_like:
-                # 用户没有点赞，返回当前点赞数
-                like_count = EventLike.query.filter(
-                    (EventLike.event_id == event_id) |
-                    (EventLike.event_group_id == event.event_group_id)
-                ).count()
-                return like_count
+    if not data or 'content' not in data:
+        return jsonify({'success': False, 'error': '缺少评论内容'}), 400
 
-            # 删除点赞记录
-            db.session.delete(existing_like)
+    def create_comment_operation():
+        # 创建新评论
+        new_comment = EventComment(
+            event_id=event_id,
+            user_id=current_user.id,
+            content=data['content'],
+            parent_id=data.get('parent_id')
+        )
+        db.session.add(new_comment)
+        return new_comment
 
-            # 计算点赞数
-            like_count = EventLike.query.filter(
-                (EventLike.event_id == event_id) |
-                (EventLike.event_group_id == event.event_group_id)
-            ).count()
-        else:
-            # 查找点赞记录
-            existing_like = EventLike.query.filter_by(
-                event_id=event_id, user_id=current_user.id).first()
-            if not existing_like:
-                # 用户没有点赞，返回当前点赞数
-                like_count = EventLike.query.filter_by(
-                    event_id=event_id).count()
-                return like_count
+    def success_response(comment):
+        return jsonify({
+            'success': True,
+            'comment': {
+                'id': comment.id,
+                'content': comment.content,
+                'created_at': comment.created_at.isoformat(),
+                'user': {
+                    'id': comment.user.id,
+                    'username': comment.user.username
+                },
+                'replies': []
+            }
+        })
 
-            # 删除点赞记录
-            db.session.delete(existing_like)
-
-            # 计算点赞数
-            like_count = EventLike.query.filter_by(event_id=event_id).count()
-        return like_count
-
-    # 成功响应函数
-    def success_response(likes):
-        return jsonify({'success': True, 'likes': likes})
-
-    # 调用API错误处理函数
     return handle_api_db_operation(
-        operation_func=unlike_event_operation,
+        operation_func=create_comment_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/event/<int:event_id>/comments/<int:comment_id>',
+           methods=['DELETE'])
+@login_required
+def delete_comment(event_id, comment_id):
+    """删除事件评论"""
+    event = SharedEvent.query.get_or_404(event_id)
+    comment = EventComment.query.get_or_404(comment_id)
+
+    # 验证评论所有者
+    if comment.user_id != current_user.id:
+        return jsonify({'success': False, 'error': '无权限删除此评论'}), 403
+
+    def delete_comment_operation():
+        db.session.delete(comment)
+        return {'success': True}
+
+    def success_response(result):
+        return jsonify(result)
+
+    return handle_api_db_operation(
+        operation_func=delete_comment_operation,
         success_response_func=success_response
     )
 
@@ -1323,6 +1224,626 @@ def delete_event(event_id):
         success_redirect='index',
         success_message='事件删除成功！'
     )
+
+
+# ------------------------------
+# 统计与分析路由
+# ------------------------------
+
+@app.route('/api/stats/events')
+@login_required
+def get_event_stats():
+    """获取事件统计数据"""
+    from sqlalchemy import func
+
+    def get_event_stats_operation():
+        # 总事件数
+        total_events = SharedEvent.query.filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).count()
+
+        # 按月份统计事件数
+        monthly_events = db.session.query(
+            func.strftime('%Y-%m', SharedEvent.start_time).label('month'),
+            func.count(SharedEvent.id).label('count')
+        ).filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).group_by('month').order_by('month').all()
+
+        # 按世界统计事件数
+        world_events = db.session.query(
+            World.world_name,
+            func.count(SharedEvent.id).label('count')
+        ).join(SharedEvent).filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).group_by(World.id).order_by(func.count(SharedEvent.id).desc()).limit(10).all()
+
+        return {
+            'total_events': total_events,
+            'monthly_events': [{'month': item.month, 'count': item.count} for item in monthly_events],
+            'world_events': [{'world_name': item.world_name, 'count': item.count} for item in world_events]
+        }
+
+    def success_response(result):
+        return jsonify({'success': True, 'data': result})
+
+    return handle_api_db_operation(
+        operation_func=get_event_stats_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/stats/friends')
+@login_required
+def get_friend_stats():
+    """获取好友互动统计"""
+    from sqlalchemy import func
+
+    def get_friend_stats_operation():
+        # 按好友统计互动次数
+        friend_interactions = db.session.query(
+            SharedEvent.friend_name,
+            func.count(SharedEvent.id).label('count')
+        ).filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).group_by(SharedEvent.friend_name).order_by(func.count(SharedEvent.id).desc()).limit(10).all()
+
+        return {
+            'friend_interactions': [{'friend_name': item.friend_name, 'count': item.count} for item in friend_interactions]
+        }
+
+    def success_response(result):
+        return jsonify({'success': True, 'data': result})
+
+    return handle_api_db_operation(
+        operation_func=get_friend_stats_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/stats/worlds')
+@login_required
+def get_world_stats():
+    """获取世界访问统计"""
+    from sqlalchemy import func
+
+    def get_world_stats_operation():
+        # 世界访问频率
+        world_visits = db.session.query(
+            World.world_name,
+            World.tags,
+            func.count(SharedEvent.id).label('visit_count')
+        ).join(SharedEvent).filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).group_by(World.id).order_by(func.count(SharedEvent.id).desc()).limit(15).all()
+
+        return {
+            'world_visits': [{
+                'world_name': item.world_name,
+                'tags': item.tags,
+                'visit_count': item.visit_count
+            } for item in world_visits]
+        }
+
+    def success_response(result):
+        return jsonify({'success': True, 'data': result})
+
+    return handle_api_db_operation(
+        operation_func=get_world_stats_operation,
+        success_response_func=success_response
+    )
+
+
+# ------------------------------
+# 好友活动动态路由
+# ------------------------------
+
+@app.route('/api/feed/friends')
+@login_required
+def get_friends_feed():
+    """获取好友活动动态"""
+    def get_friends_feed_operation():
+        # 获取当前用户的所有好友ID
+        friend_ids = [friend.id for friend in current_user.friends.all()]
+
+        # 获取好友的活动动态
+        feed_items = ActivityFeed.query.filter(
+            ActivityFeed.user_id.in_(friend_ids)
+        ).order_by(ActivityFeed.created_at.desc()).limit(50).all()
+
+        # 序列化活动动态
+        def serialize_feed_item(item):
+            # 获取关联对象的信息
+            target_info = {}
+            if item.target_type == 'event' and item.target_id:
+                event = SharedEvent.query.get(item.target_id)
+                if event:
+                    target_info = {
+                        'id': event.id,
+                        'title': f"与 {event.friend_name} 在 {event.world.world_name}",
+                        'world_name': event.world.world_name,
+                        'friend_name': event.friend_name
+                    }
+            elif item.target_type == 'comment' and item.target_id:
+                comment = EventComment.query.get(item.target_id)
+                if comment:
+                    target_info = {
+                        'id': comment.id,
+                        'content': comment.content[:50] + '...' if len(comment.content) > 50 else comment.content,
+                        'event_id': comment.event_id
+                    }
+
+            return {
+                'id': item.id,
+                'user': {
+                    'id': item.user.id,
+                    'username': item.user.username
+                },
+                'activity_type': item.activity_type,
+                'target_type': item.target_type,
+                'target_id': item.target_id,
+                'target_info': target_info,
+                'created_at': item.created_at.isoformat()
+            }
+
+        return {
+            'feed': [serialize_feed_item(item) for item in feed_items],
+            'total': len(feed_items)
+        }
+
+    def success_response(result):
+        return jsonify(
+            {'success': True, 'feed': result['feed'], 'total': result['total']})
+
+    return handle_api_db_operation(
+        operation_func=get_friends_feed_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/feed')
+@login_required
+def friends_feed():
+    """好友活动动态页面"""
+    return render_template('feed.html')
+
+
+# ------------------------------
+# 事件导出路由
+# ------------------------------
+
+@app.route('/api/events/export')
+@login_required
+def export_events():
+    """导出事件数据"""
+    import csv
+    from io import StringIO
+    from datetime import datetime
+
+    # 获取参数
+    export_format = request.args.get('format', 'csv').lower()
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    tag = request.args.get('tag')
+
+    def export_events_operation():
+        # 构建事件查询
+        from sqlalchemy import or_
+        query = SharedEvent.query.filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        )
+
+        # 应用日期筛选
+        if start_date:
+            try:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                query = query.filter(SharedEvent.start_time >= start_dt)
+            except ValueError:
+                pass
+
+        if end_date:
+            try:
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                query = query.filter(SharedEvent.end_time <= end_dt)
+            except ValueError:
+                pass
+
+        # 应用标签筛选
+        if tag:
+            query = filter_events_by_tag(query, tag)
+
+        events = query.order_by(SharedEvent.start_time.desc()).all()
+
+        # 根据格式导出
+        if export_format == 'json':
+            # 导出为JSON
+            import json
+            events_data = []
+            for event in events:
+                events_data.append({
+                    'id': event.id,
+                    'friend_name': event.friend_name,
+                    'world_name': event.world.world_name,
+                    'start_time': event.start_time.isoformat(),
+                    'end_time': event.end_time.isoformat() if event.end_time else None,
+                    'duration': event.duration,
+                    'notes': event.notes,
+                    'privacy': event.privacy,
+                    'custom_tags': [tag.tag_name for tag in event.custom_tags],
+                    'world_tags': event.world.tags.split(',') if event.world.tags else []
+                })
+            return {
+                'format': 'json',
+                'data': json.dumps(events_data, ensure_ascii=False, indent=2),
+                'filename': f'events_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+            }
+        else:
+            # 默认导出为CSV
+            csv_data = StringIO()
+            fieldnames = [
+                'id',
+                'friend_name',
+                'world_name',
+                'start_time',
+                'end_time',
+                'duration',
+                'notes',
+                'privacy',
+                'custom_tags',
+                'world_tags']
+            writer = csv.DictWriter(csv_data, fieldnames=fieldnames)
+
+            writer.writeheader()
+            for event in events:
+                writer.writerow({
+                    'id': event.id,
+                    'friend_name': event.friend_name,
+                    'world_name': event.world.world_name,
+                    'start_time': event.start_time.isoformat(),
+                    'end_time': event.end_time.isoformat() if event.end_time else '',
+                    'duration': event.duration,
+                    'notes': event.notes or '',
+                    'privacy': event.privacy,
+                    'custom_tags': ','.join([tag.tag_name for tag in event.custom_tags]),
+                    'world_tags': event.world.tags or ''
+                })
+
+            return {
+                'format': 'csv',
+                'data': csv_data.getvalue(),
+                'filename': f'events_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+            }
+
+    def success_response(result):
+        from flask import Response
+
+        # 设置响应头
+        mimetype = 'application/json' if result['format'] == 'json' else 'text/csv'
+        return Response(
+            result['data'],
+            mimetype=mimetype,
+            headers={
+                'Content-Disposition': f'attachment; filename={result["filename"]}'
+            }
+        )
+
+    return handle_api_db_operation(
+        operation_func=export_events_operation,
+        success_response_func=success_response
+    )
+
+
+# ------------------------------
+# 高级可视化路由
+# ------------------------------
+
+@app.route('/api/visualization/timeline')
+@login_required
+def get_timeline_data():
+    """获取时间线可视化数据"""
+    def get_timeline_data_operation():
+        # 获取事件数据
+        events = SharedEvent.query.filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).order_by(SharedEvent.start_time).all()
+
+        # 格式化数据
+        timeline_data = []
+        for event in events:
+            timeline_data.append({
+                'id': event.id,
+                'title': f"与 {event.friend_name} 在 {event.world.world_name}",
+                'start': event.start_time.isoformat(),
+                'end': event.end_time.isoformat() if event.end_time else None,
+                'duration': event.duration,
+                'world': event.world.world_name,
+                'friend': event.friend_name
+            })
+
+        return timeline_data
+
+    def success_response(result):
+        return jsonify({'success': True, 'data': result})
+
+    return handle_api_db_operation(
+        operation_func=get_timeline_data_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/visualization/network')
+@login_required
+def get_network_data():
+    """获取社交网络图数据"""
+    def get_network_data_operation():
+        # 获取所有事件
+        events = SharedEvent.query.filter(
+            (SharedEvent.user_id == current_user.id) |
+            (SharedEvent.participants.contains(current_user))
+        ).all()
+
+        # 构建节点和边
+        nodes = []
+        edges = []
+        node_set = set()
+
+        # 添加当前用户
+        current_user_node = {
+            'id': current_user.id,
+            'name': current_user.username,
+            'type': 'user',
+            'is_current': True
+        }
+        nodes.append(current_user_node)
+        node_set.add(current_user.username)
+
+        # 添加好友和世界节点
+        for event in events:
+            # 添加好友节点
+            if event.friend_name not in node_set:
+                friend_node = {
+                    'id': f"friend_{event.friend_name}",
+                    'name': event.friend_name,
+                    'type': 'friend'
+                }
+                nodes.append(friend_node)
+                node_set.add(event.friend_name)
+
+            # 添加世界节点
+            if event.world.world_name not in node_set:
+                world_node = {
+                    'id': f"world_{event.world.id}",
+                    'name': event.world.world_name,
+                    'type': 'world'
+                }
+                nodes.append(world_node)
+                node_set.add(event.world.world_name)
+
+            # 添加边：用户-好友
+            user_friend_edge = {
+                'source': current_user.username,
+                'target': event.friend_name,
+                'event_id': event.id,
+                'type': 'friend'
+            }
+            edges.append(user_friend_edge)
+
+            # 添加边：用户-世界
+            user_world_edge = {
+                'source': current_user.username,
+                'target': event.world.world_name,
+                'event_id': event.id,
+                'type': 'world'
+            }
+            edges.append(user_world_edge)
+
+        return {
+            'nodes': nodes,
+            'edges': edges
+        }
+
+    def success_response(result):
+        return jsonify({'success': True, 'data': result})
+
+    return handle_api_db_operation(
+        operation_func=get_network_data_operation,
+        success_response_func=success_response
+    )
+
+
+# ------------------------------
+# 事件提醒路由
+# ------------------------------
+
+class EventReminder(db.Model):
+    """事件提醒模型"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'shared_event.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'user.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    reminder_time = db.Column(db.DateTime, nullable=False)
+    is_sent = db.Column(db.Boolean, default=False)
+
+    event = db.relationship('SharedEvent', backref='reminders')
+    user = db.relationship('User', backref='reminders')
+
+
+@app.route('/api/event/<int:event_id>/reminders')
+@login_required
+def get_event_reminders(event_id):
+    """获取事件提醒"""
+    event = SharedEvent.query.get_or_404(event_id)
+
+    def get_event_reminders_operation():
+        reminders = EventReminder.query.filter_by(
+            event_id=event_id, user_id=current_user.id).all()
+
+        def serialize_reminder(reminder):
+            return {
+                'id': reminder.id,
+                'event_id': reminder.event_id,
+                'reminder_time': reminder.reminder_time.isoformat(),
+                'is_sent': reminder.is_sent
+            }
+
+        return {
+            'reminders': [serialize_reminder(reminder) for reminder in reminders]
+        }
+
+    def success_response(result):
+        return jsonify({'success': True, 'reminders': result['reminders']})
+
+    return handle_api_db_operation(
+        operation_func=get_event_reminders_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/event/<int:event_id>/reminders', methods=['POST'])
+@login_required
+def create_reminder(event_id):
+    """创建事件提醒"""
+    event = SharedEvent.query.get_or_404(event_id)
+    data = request.get_json()
+
+    if not data or 'reminder_time' not in data:
+        return jsonify({'success': False, 'error': '缺少提醒时间'}), 400
+
+    def create_reminder_operation():
+        from datetime import datetime
+
+        reminder_time = datetime.fromisoformat(data['reminder_time'])
+
+        new_reminder = EventReminder(
+            event_id=event_id,
+            user_id=current_user.id,
+            reminder_time=reminder_time
+        )
+        db.session.add(new_reminder)
+        return new_reminder
+
+    def success_response(reminder):
+        return jsonify({
+            'success': True,
+            'reminder': {
+                'id': reminder.id,
+                'event_id': reminder.event_id,
+                'reminder_time': reminder.reminder_time.isoformat(),
+                'is_sent': reminder.is_sent
+            }
+        })
+
+    return handle_api_db_operation(
+        operation_func=create_reminder_operation,
+        success_response_func=success_response
+    )
+
+
+# ------------------------------
+# 事件分享路由
+# ------------------------------
+
+class EventShare(db.Model):
+    """事件分享模型"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'shared_event.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    share_token = db.Column(db.String(100), unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    event = db.relationship('SharedEvent', backref='shares')
+
+
+@app.route('/api/event/<int:event_id>/share', methods=['POST'])
+@login_required
+def share_event(event_id):
+    """生成事件分享链接"""
+    event = SharedEvent.query.get_or_404(event_id)
+    data = request.get_json()
+
+    def share_event_operation():
+        import uuid
+        from datetime import datetime, timedelta
+
+        # 生成分享令牌
+        share_token = str(uuid.uuid4())[:8]
+
+        # 设置过期时间（默认7天）
+        expires_at = datetime.now() + timedelta(days=data.get('expires_in_days', 7))
+
+        # 创建分享记录
+        new_share = EventShare(
+            event_id=event_id,
+            share_token=share_token,
+            expires_at=expires_at
+        )
+        db.session.add(new_share)
+
+        return {
+            'share_token': share_token,
+            'share_url': f"{request.host_url}share/{share_token}",
+            'expires_at': expires_at.isoformat()
+        }
+
+    def success_response(result):
+        return jsonify(
+            {'success': True, 'share_url': result['share_url'], 'expires_at': result['expires_at']})
+
+    return handle_api_db_operation(
+        operation_func=share_event_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/share/<string:share_token>')
+def shared_event(share_token):
+    """访问分享的事件"""
+    share = EventShare.query.filter_by(share_token=share_token).first()
+
+    if not share:
+        return render_template('error.html', error='分享链接无效或已过期'), 404
+
+    if share.expires_at < datetime.now():
+        return render_template('error.html', error='分享链接已过期'), 410
+
+    event = share.event
+
+    return render_template('event_detail.html', event=event)
+
+
+@app.route('/stats')
+@login_required
+def stats():
+    """统计分析页面"""
+    return render_template('stats.html')
+
+
+@app.route('/visualization')
+@login_required
+def visualization_page():
+    """高级可视化页面"""
+    return render_template('visualization.html')
 
 
 # ------------------------------

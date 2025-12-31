@@ -1,0 +1,273 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <article class="visualization-page" role="article" aria-label="高级可视化">
+        <header class="page-header mb-4" role="banner">
+            <h1 class="mb-2">📊 高级可视化</h1>
+            <nav aria-label="面包屑导航" class="breadcrumb-nav">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">时间线</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">高级可视化</li>
+                </ol>
+            </nav>
+        </header>
+
+        <div class="row">
+            <!-- 导航选项卡 -->
+            <div class="col-lg-12 mb-4">
+                <nav>
+                    <div class="nav nav-tabs" id="visualization-tabs" role="tablist">
+                        <button class="nav-link active" id="timeline-tab" data-bs-toggle="tab" data-bs-target="#timeline-content" type="button" role="tab" aria-controls="timeline-content" aria-selected="true">时间线视图</button>
+                        <button class="nav-link" id="network-tab" data-bs-toggle="tab" data-bs-target="#network-content" type="button" role="tab" aria-controls="network-content" aria-selected="false">社交网络图</button>
+                    </div>
+                </nav>
+                <div class="tab-content" id="visualization-tab-content">
+                    <!-- 时间线视图 -->
+                    <div class="tab-pane fade show active" id="timeline-content" role="tabpanel" aria-labelledby="timeline-tab">
+                        <div class="card shadow-sm mt-4">
+                            <div class="card-body">
+                                <h2 class="card-title h5 mb-4">⏰ 事件时间线</h2>
+                                <div id="timeline-container" class="timeline-visualization" style="height: 600px;">
+                                    <div class="text-center my-5">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                        <p class="mt-2">正在加载时间线数据...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 社交网络图视图 -->
+                    <div class="tab-pane fade" id="network-content" role="tabpanel" aria-labelledby="network-tab">
+                        <div class="card shadow-sm mt-4">
+                            <div class="card-body">
+                                <h2 class="card-title h5 mb-4">🌐 社交网络图</h2>
+                                <div id="network-container" class="network-visualization" style="height: 600px;">
+                                    <div class="text-center my-5">
+                                        <div class="spinner-border" role="status">
+                                            <span class="visually-hidden">加载中...</span>
+                                        </div>
+                                        <p class="mt-2">正在加载社交网络数据...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </article>
+{% endblock %}
+
+{% block scripts %}
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 时间线可视化
+            async function initTimeline() {
+                try {
+                    const response = await fetch('/api/visualization/timeline');
+                    if (response.ok) {
+                        const data = await response.json();
+                        renderTimeline(data.data);
+                    }
+                } catch (error) {
+                    console.error('加载时间线数据失败:', error);
+                }
+            }
+            
+            function renderTimeline(data) {
+                const container = document.getElementById('timeline-container');
+                
+                // 创建图表
+                const ctx = document.createElement('canvas');
+                container.innerHTML = '';
+                container.appendChild(ctx);
+                
+                // 处理数据
+                const labels = data.map(item => {
+                    const date = new Date(item.start);
+                    return date.toLocaleDateString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
+                });
+                
+                const durations = data.map(item => item.duration / 3600); // 转换为小时
+                
+                // 创建条形图
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '持续时间（小时）',
+                            data: durations,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: '持续时间（小时）'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: '日期'
+                                }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const item = data[context.dataIndex];
+                                        return `持续时间: ${item.duration / 3600} 小时\n与 ${item.friend} 在 ${item.world}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 社交网络图可视化
+            async function initNetwork() {
+                try {
+                    const response = await fetch('/api/visualization/network');
+                    if (response.ok) {
+                        const data = await response.json();
+                        renderNetwork(data.data);
+                    }
+                } catch (error) {
+                    console.error('加载网络数据失败:', error);
+                }
+            }
+            
+            function renderNetwork(data) {
+                const container = document.getElementById('network-container');
+                container.innerHTML = '';
+                
+                // 设置尺寸
+                const width = container.clientWidth;
+                const height = 600;
+                
+                // 创建SVG
+                const svg = d3.select(container)
+                    .append('svg')
+                    .attr('width', width)
+                    .attr('height', height)
+                    .style('border', '1px solid #eee');
+                
+                // 创建力导向图
+                const simulation = d3.forceSimulation(data.nodes)
+                    .force('link', d3.forceLink(data.edges).id(d => d.id).distance(100))
+                    .force('charge', d3.forceManyBody().strength(-300))
+                    .force('center', d3.forceCenter(width / 2, height / 2))
+                    .force('collision', d3.forceCollide().radius(30));
+                
+                // 绘制边
+                const link = svg.append('g')
+                    .attr('class', 'links')
+                    .selectAll('line')
+                    .data(data.edges)
+                    .enter().append('line')
+                    .attr('stroke', '#999')
+                    .attr('stroke-opacity', 0.6)
+                    .attr('stroke-width', 2);
+                
+                // 绘制节点
+                const node = svg.append('g')
+                    .attr('class', 'nodes')
+                    .selectAll('circle')
+                    .data(data.nodes)
+                    .enter().append('circle')
+                    .attr('r', 20)
+                    .attr('fill', d => {
+                        if (d.is_current) return '#ff6b6b';
+                        if (d.type === 'friend') return '#4ecdc4';
+                        if (d.type === 'world') return '#45b7d1';
+                        return '#95a5a6';
+                    })
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 2)
+                    .call(d3.drag()
+                        .on('start', dragstarted)
+                        .on('drag', dragged)
+                        .on('end', dragended));
+                
+                // 添加节点标签
+                const labels = svg.append('g')
+                    .attr('class', 'labels')
+                    .selectAll('text')
+                    .data(data.nodes)
+                    .enter().append('text')
+                    .text(d => d.name)
+                    .attr('font-size', 12)
+                    .attr('text-anchor', 'middle')
+                    .attr('dy', 40);
+                
+                // 力导向图更新函数
+                simulation.on('tick', () => {
+                    link
+                        .attr('x1', d => d.source.x)
+                        .attr('y1', d => d.source.y)
+                        .attr('x2', d => d.target.x)
+                        .attr('y2', d => d.target.y);
+                    
+                    node
+                        .attr('cx', d => d.x)
+                        .attr('cy', d => d.y);
+                    
+                    labels
+                        .attr('x', d => d.x)
+                        .attr('y', d => d.y);
+                });
+                
+                // 拖拽事件处理
+                function dragstarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+                
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+                
+                function dragended(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+            }
+            
+            // 初始化可视化
+            initTimeline();
+            
+            // 选项卡切换事件
+            document.getElementById('visualization-tabs').addEventListener('shown.bs.tab', function(event) {
+                if (event.target.id === 'network-tab') {
+                    initNetwork();
+                }
+            });
+        });
+    </script>
+{% endblock %}

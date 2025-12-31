@@ -1,0 +1,311 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <article class="stats-page" role="article" aria-label="统计与分析">
+        <header class="page-header mb-4" role="banner">
+            <h1 class="mb-2">📊 统计与分析</h1>
+            <nav aria-label="面包屑导航" class="breadcrumb-nav">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">时间线</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">统计与分析</li>
+                </ol>
+            </nav>
+        </header>
+
+        <div class="row">
+            <!-- 统计卡片 -->
+            <div class="col-lg-12 mb-4">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card shadow-sm text-center" role="region" aria-labelledby="total-events">
+                            <div class="card-body">
+                                <h3 id="total-events" class="card-title h4">总事件数</h3>
+                                <p class="card-text display-4" id="total-events-count">--</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card shadow-sm text-center" role="region" aria-labelledby="top-friend">
+                            <div class="card-body">
+                                <h3 id="top-friend" class="card-title h4">最常互动好友</h3>
+                                <p class="card-text display-5" id="top-friend-name">--</p>
+                                <p class="card-text text-muted" id="top-friend-count">-- 次互动</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card shadow-sm text-center" role="region" aria-labelledby="top-world">
+                            <div class="card-body">
+                                <h3 id="top-world" class="card-title h4">最常访问世界</h3>
+                                <p class="card-text display-6" id="top-world-name">--</p>
+                                <p class="card-text text-muted" id="top-world-count">-- 次访问</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 事件趋势图 -->
+            <div class="col-lg-12 mb-4">
+                <section class="card shadow-sm" role="region" aria-labelledby="event-trend-chart">
+                    <div class="card-body">
+                        <h2 id="event-trend-chart" class="card-title h5 mb-4">📈 事件趋势</h2>
+                        <div class="chart-container" style="height: 400px;">
+                            <canvas id="eventTrendChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- 好友互动和世界访问 -->
+            <div class="col-lg-6 mb-4">
+                <section class="card shadow-sm" role="region" aria-labelledby="friend-interaction-chart">
+                    <div class="card-body">
+                        <h2 id="friend-interaction-chart" class="card-title h5 mb-4">👥 好友互动</h2>
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="friendInteractionChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="col-lg-6 mb-4">
+                <section class="card shadow-sm" role="region" aria-labelledby="world-visit-chart">
+                    <div class="card-body">
+                        <h2 id="world-visit-chart" class="card-title h5 mb-4">🌍 世界访问</h2>
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="worldVisitChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </article>
+{% endblock %}
+
+{% block scripts %}
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化图表
+            let eventTrendChart, friendInteractionChart, worldVisitChart;
+            
+            // 加载事件统计数据
+            async function loadEventStats() {
+                try {
+                    const response = await fetch('/api/stats/events');
+                    if (response.ok) {
+                        const data = await response.json();
+                        updateEventStats(data.data);
+                    }
+                } catch (error) {
+                    console.error('加载事件统计失败:', error);
+                }
+            }
+            
+            // 加载好友统计数据
+            async function loadFriendStats() {
+                try {
+                    const response = await fetch('/api/stats/friends');
+                    if (response.ok) {
+                        const data = await response.json();
+                        updateFriendStats(data.data);
+                    }
+                } catch (error) {
+                    console.error('加载好友统计失败:', error);
+                }
+            }
+            
+            // 加载世界统计数据
+            async function loadWorldStats() {
+                try {
+                    const response = await fetch('/api/stats/worlds');
+                    if (response.ok) {
+                        const data = await response.json();
+                        updateWorldStats(data.data);
+                    }
+                } catch (error) {
+                    console.error('加载世界统计失败:', error);
+                }
+            }
+            
+            // 更新事件统计
+            function updateEventStats(data) {
+                // 更新总事件数
+                document.getElementById('total-events-count').textContent = data.total_events;
+                
+                // 更新事件趋势图
+                const ctx = document.getElementById('eventTrendChart').getContext('2d');
+                const labels = data.monthly_events.map(item => item.month);
+                const counts = data.monthly_events.map(item => item.count);
+                
+                if (eventTrendChart) {
+                    eventTrendChart.destroy();
+                }
+                
+                eventTrendChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '事件数',
+                            data: counts,
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: '事件数量'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: '月份'
+                                }
+                            }
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: '事件趋势分析'
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 更新好友统计
+            function updateFriendStats(data) {
+                if (data.friend_interactions && data.friend_interactions.length > 0) {
+                    // 更新最常互动好友
+                    const topFriend = data.friend_interactions[0];
+                    document.getElementById('top-friend-name').textContent = topFriend.friend_name;
+                    document.getElementById('top-friend-count').textContent = `${topFriend.count} 次互动`;
+                    
+                    // 更新好友互动图表
+                    const ctx = document.getElementById('friendInteractionChart').getContext('2d');
+                    const friendNames = data.friend_interactions.map(item => item.friend_name);
+                    const interactionCounts = data.friend_interactions.map(item => item.count);
+                    
+                    if (friendInteractionChart) {
+                        friendInteractionChart.destroy();
+                    }
+                    
+                    friendInteractionChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: friendNames,
+                            datasets: [{
+                                label: '互动次数',
+                                data: interactionCounts,
+                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: '互动次数'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: '好友互动排名'
+                                },
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // 更新世界统计
+            function updateWorldStats(data) {
+                if (data.world_visits && data.world_visits.length > 0) {
+                    // 更新最常访问世界
+                    const topWorld = data.world_visits[0];
+                    document.getElementById('top-world-name').textContent = topWorld.world_name;
+                    document.getElementById('top-world-count').textContent = `${topWorld.visit_count} 次访问`;
+                    
+                    // 更新世界访问图表
+                    const ctx = document.getElementById('worldVisitChart').getContext('2d');
+                    const worldNames = data.world_visits.map(item => item.world_name);
+                    const visitCounts = data.world_visits.map(item => item.visit_count);
+                    
+                    if (worldVisitChart) {
+                        worldVisitChart.destroy();
+                    }
+                    
+                    worldVisitChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: worldNames,
+                            datasets: [{
+                                data: visitCounts,
+                                backgroundColor: [
+                                    'rgba(255, 99, 132, 0.6)',
+                                    'rgba(54, 162, 235, 0.6)',
+                                    'rgba(255, 206, 86, 0.6)',
+                                    'rgba(75, 192, 192, 0.6)',
+                                    'rgba(153, 102, 255, 0.6)',
+                                    'rgba(255, 159, 64, 0.6)',
+                                    'rgba(199, 199, 199, 0.6)',
+                                    'rgba(83, 102, 255, 0.6)',
+                                    'rgba(255, 102, 255, 0.6)',
+                                    'rgba(102, 255, 102, 0.6)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: '世界访问分布'
+                                },
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        font: {
+                                            size: 10
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // 加载所有统计数据
+            loadEventStats();
+            loadFriendStats();
+            loadWorldStats();
+        });
+    </script>
+{% endblock %}

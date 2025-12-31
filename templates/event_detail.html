@@ -149,21 +149,40 @@
                     </div>
                 </section>
 
-                <!-- 点赞功能 -->
-                <section class="card shadow-sm mb-4" role="region" aria-labelledby="likes-heading">
+                
+
+
+
+                <!-- 评论功能 -->
+                <section class="card shadow-sm mb-4" role="region" aria-labelledby="comments-heading">
                     <div class="card-body">
-                        <h2 id="likes-heading" class="card-title h5 mb-3">{% if event.is_liked_by_current_user %}❤️{% else %}👍{% endif %} 点赞</h2>
-                        <button class="like-btn btn btn-outline-danger btn-lg {% if event.is_liked_by_current_user %}btn-danger text-white{% endif %}" 
-                                data-event-id="{{ event.id }}"
-                                data-liked="{{ 'true' if event.is_liked_by_current_user else 'false' }}"
-                                aria-label="{% if event.is_liked_by_current_user %}取消点赞{% else %}为事件点赞{% endif %}，当前点赞数：{{ event.like_count }}"
-                                aria-live="polite">
-                            <span class="like-icon">{% if event.is_liked_by_current_user %}❤️{% else %}👍{% endif %}</span> 
-                            <span class="like-count">{{ event.like_count }}</span>
-                        </button>
-                        <p class="text-muted mt-2 small">
-                            {% if event.is_liked_by_current_user %}您已经点赞了此事件，再次点击可取消点赞{% else %}点击按钮表达您对此事件的喜爱{% endif %}
-                        </p>
+                        <h2 id="comments-heading" class="card-title h5 mb-4">💬 评论</h2>
+                        
+                        <!-- 评论表单 -->
+                        <form id="comment-form" class="mb-4" role="form" aria-label="添加评论">
+                            <div class="mb-3">
+                                <label for="comment-content" class="form-label visually-hidden">添加评论</label>
+                                <textarea id="comment-content" name="content" rows="3" 
+                                          class="form-control" 
+                                          placeholder="写下您的评论..." 
+                                          aria-describedby="comment-help" 
+                                          required></textarea>
+                                <small id="comment-help" class="form-text text-muted">
+                                    分享您对此事件的回忆和感受
+                                </small>
+                            </div>
+                            <button type="submit" class="btn btn-primary" aria-label="发布评论">
+                                发布评论
+                            </button>
+                        </form>
+                        
+                        <!-- 评论列表 -->
+                        <div id="comments-container" class="comments-list">
+                            <p class="text-muted" id="no-comments-message" aria-live="polite">
+                                暂无评论，快来抢沙发吧！
+                            </p>
+                            <!-- 评论将通过JavaScript动态加载 -->
+                        </div>
                     </div>
                 </section>
 
@@ -240,58 +259,197 @@
 {% endblock %}
 
 {% block scripts %}
-    <!-- 点赞功能脚本 -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // 点赞按钮事件监听
-            document.querySelectorAll('.like-btn').forEach(btn => {
-                btn.addEventListener('click', async function() {
-                    const eventId = this.dataset.eventId;
-                    const likeCountSpan = this.querySelector('.like-count');
-                    const likeIcon = this.querySelector('.like-icon');
-                    const isLiked = this.dataset.liked === 'true';
+
+            // ------------------------------
+            // 评论功能脚本
+            // ------------------------------
+            
+            // 格式化日期
+            function formatDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+            
+            // 渲染单条评论
+            function renderComment(comment) {
+                const commentDiv = document.createElement('div');
+                commentDiv.className = 'comment mb-3 p-3 border rounded';
+                commentDiv.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="comment-header">
+                            <span class="comment-username fw-bold">${comment.user.username}</span>
+                            <span class="comment-date text-muted small ms-2">${formatDate(comment.created_at)}</span>
+                        </div>
+                        <button class="delete-comment-btn btn btn-sm btn-danger" data-comment-id="${comment.id}" aria-label="删除评论">
+                            删除
+                        </button>
+                    </div>
+                    <div class="comment-content mt-2">${comment.content}</div>
+                    <div class="comment-actions mt-2">
+                        <button class="reply-btn btn btn-sm btn-link text-primary" data-comment-id="${comment.id}" aria-label="回复评论">
+                            回复
+                        </button>
+                    </div>
+                    <div class="replies mt-3 ms-4 border-start ps-3" id="replies-${comment.id}">
+                        ${comment.replies.map(renderComment).join('')}
+                    </div>
+                    <div class="reply-form mt-3 d-none" id="reply-form-${comment.id}">
+                        <textarea class="form-control reply-content" rows="2" placeholder="回复..."></textarea>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="submit-reply btn btn-sm btn-primary" data-comment-id="${comment.id}">发送</button>
+                            <button class="cancel-reply btn btn-sm btn-secondary" data-comment-id="${comment.id}">取消</button>
+                        </div>
+                    </div>
+                `;
+                return commentDiv;
+            }
+            
+            // 加载所有评论
+            async function loadComments() {
+                try {
+                    const response = await fetch(`/api/event/${eventId}/comments`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        const commentsContainer = document.getElementById('comments-container');
+                        const noCommentsMessage = document.getElementById('no-comments-message');
+                        
+                        if (data.comments && data.comments.length > 0) {
+                            noCommentsMessage.classList.add('d-none');
+                            commentsContainer.innerHTML = '';
+                            data.comments.forEach(comment => {
+                                const commentDiv = renderComment(comment);
+                                commentsContainer.appendChild(commentDiv);
+                            });
+                            
+                            // 添加事件监听
+                            addCommentEventListeners();
+                        } else {
+                            noCommentsMessage.classList.remove('d-none');
+                        }
+                    }
+                } catch (error) {
+                    console.error('加载评论失败:', error);
+                }
+            }
+            
+            // 添加评论事件监听
+            function addCommentEventListeners() {
+                // 删除评论按钮
+                document.querySelectorAll('.delete-comment-btn').forEach(btn => {
+                    btn.addEventListener('click', async function() {
+                        const commentId = this.dataset.commentId;
+                        if (confirm('确定要删除这条评论吗？')) {
+                            try {
+                                const response = await fetch(`/api/event/${eventId}/comments/${commentId}`, {
+                                    method: 'DELETE'
+                                });
+                                if (response.ok) {
+                                    // 重新加载评论
+                                    loadComments();
+                                }
+                            } catch (error) {
+                                console.error('删除评论失败:', error);
+                            }
+                        }
+                    });
+                });
+                
+                // 回复按钮
+                document.querySelectorAll('.reply-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const commentId = this.dataset.commentId;
+                        const replyForm = document.getElementById(`reply-form-${commentId}`);
+                        replyForm.classList.toggle('d-none');
+                    });
+                });
+                
+                // 取消回复按钮
+                document.querySelectorAll('.cancel-reply').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const commentId = this.dataset.commentId;
+                        const replyForm = document.getElementById(`reply-form-${commentId}`);
+                        replyForm.classList.add('d-none');
+                        replyForm.querySelector('.reply-content').value = '';
+                    });
+                });
+                
+                // 提交回复按钮
+                document.querySelectorAll('.submit-reply').forEach(btn => {
+                    btn.addEventListener('click', async function() {
+                        const commentId = this.dataset.commentId;
+                        const replyContent = document.querySelector(`#reply-form-${commentId} .reply-content`).value;
+                        
+                        if (!replyContent.trim()) {
+                            alert('回复内容不能为空');
+                            return;
+                        }
+                        
+                        try {
+                            const response = await fetch(`/api/event/${eventId}/comments`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    content: replyContent,
+                                    parent_id: commentId
+                                })
+                            });
+                            
+                            if (response.ok) {
+                                // 重新加载评论
+                                loadComments();
+                            }
+                        } catch (error) {
+                            console.error('发送回复失败:', error);
+                        }
+                    });
+                });
+            }
+            
+            // 评论表单提交
+            const commentForm = document.getElementById('comment-form');
+            if (commentForm) {
+                commentForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const content = document.getElementById('comment-content').value;
+                    
+                    if (!content.trim()) {
+                        alert('评论内容不能为空');
+                        return;
+                    }
                     
                     try {
-                        // 确定请求方法和URL
-                        const method = isLiked ? 'DELETE' : 'POST';
-                        const response = await fetch(`/api/event/${eventId}/like`, {
-                            method: method,
+                        const response = await fetch(`/api/event/${eventId}/comments`, {
+                            method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
-                            }
+                            },
+                            body: JSON.stringify({ content: content })
                         });
                         
                         if (response.ok) {
-                            const data = await response.json();
-                            // 更新点赞数
-                            likeCountSpan.textContent = data.likes;
-                            
-                            // 更新按钮状态
-                            if (isLiked) {
-                                // 取消点赞
-                                this.classList.remove('btn-danger', 'text-white');
-                                this.classList.add('btn-outline-danger');
-                                likeIcon.textContent = '👍';
-                                this.dataset.liked = 'false';
-                                this.setAttribute('aria-label', `为事件点赞，当前点赞数：${data.likes}`);
-                                // 更新标题
-                                document.querySelector('#likes-heading').textContent = '👍 点赞';
-                            } else {
-                                // 点赞
-                                this.classList.remove('btn-outline-danger');
-                                this.classList.add('btn-danger', 'text-white');
-                                likeIcon.textContent = '❤️';
-                                this.dataset.liked = 'true';
-                                this.setAttribute('aria-label', `取消点赞，当前点赞数：${data.likes}`);
-                                // 更新标题
-                                document.querySelector('#likes-heading').textContent = '❤️ 点赞';
-                            }
+                            // 清空表单
+                            commentForm.reset();
+                            // 重新加载评论
+                            loadComments();
                         }
                     } catch (error) {
-                        console.error('点赞操作失败:', error);
+                        console.error('发布评论失败:', error);
                     }
                 });
-            });
+            }
+            
+            // 初始加载评论
+            loadComments();
         });
     </script>
 {% endblock %}

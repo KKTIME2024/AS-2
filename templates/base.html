@@ -32,6 +32,15 @@
                             <a class="nav-link" href="{{ url_for('create_event') }}" role="menuitem" aria-label="创建新事件">
                                 创建事件
                             </a>
+                            <a class="nav-link" href="{{ url_for('friends_feed') }}" role="menuitem" aria-label="查看好友动态">
+                                好友动态
+                            </a>
+                            <a class="nav-link" href="{{ url_for('stats') }}" role="menuitem" aria-label="查看统计分析">
+                                统计分析
+                            </a>
+                            <a class="nav-link" href="{{ url_for('visualization_page') }}" role="menuitem" aria-label="查看高级可视化">
+                                高级可视化
+                            </a>
                             <span class="nav-link" role="status" aria-label="当前用户">
                                 欢迎, {{ current_user.username }}
                             </span>
