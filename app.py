@@ -30,6 +30,14 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
     events = db.relationship('SharedEvent', backref='user', lazy=True)
+    friends = db.relationship(
+        'User',
+        secondary='user_friends',
+        primaryjoin='user_friends.c.user_id == User.id',
+        secondaryjoin='user_friends.c.friend_id == User.id',
+        backref=db.backref('friended_by', lazy='dynamic'),
+        lazy='dynamic'
+    )
 
 
 class World(db.Model):
@@ -41,21 +49,54 @@ class World(db.Model):
     events = db.relationship('SharedEvent', backref='world', lazy=True)
 
 
+class EventGroup(db.Model):
+    """事件组模型，用于关联不同用户的同一共同事件"""
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)  # 创建时间
+    # 关联的事件
+    events = db.relationship(
+        'SharedEvent',
+        backref='event_group',
+        lazy=True
+    )
+    # 关联的点赞
+    likes = db.relationship(
+        'EventLike',
+        backref='event_group',
+        lazy=True
+    )
+
+
 class SharedEvent(db.Model):
     """共同房间事件模型"""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     world_id = db.Column(db.Integer, db.ForeignKey('world.id'), nullable=False)
+    event_group_id = db.Column(
+        db.Integer,
+        db.ForeignKey('event_group.id'),
+        nullable=True)  # 关联事件组
     friend_name = db.Column(db.String(80), nullable=False)
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime)
     duration = db.Column(db.Integer)  # 持续时间（秒）
     notes = db.Column(db.Text, nullable=True)  # 事件备注
-    likes = db.Column(db.Integer, default=0)  # 点赞数
     custom_tags = db.relationship(
         'EventTag',
         backref='event',
         lazy=True,  # 懒加载
+        cascade='all, delete-orphan'  # 级联删除
+    )
+    participants = db.relationship(
+        'User',
+        secondary='event_participants',
+        backref=db.backref('participated_events', lazy='dynamic'),
+        lazy='dynamic'
+    )
+    likes = db.relationship(
+        'EventLike',
+        backref='event',
+        lazy=True,
         cascade='all, delete-orphan'  # 级联删除
     )
 
@@ -70,6 +111,75 @@ class EventTag(db.Model):
     tag_name = db.Column(db.String(50), primary_key=True)
 
 
+class EventLike(db.Model):
+    """事件点赞模型"""
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'shared_event.id',
+            ondelete='CASCADE'),
+        nullable=True)  # 改为可空，支持事件组点赞
+    event_group_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'event_group.id',
+            ondelete='CASCADE'),
+        nullable=True)  # 事件组ID
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'user.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    # 确保每个用户对每个事件或事件组只能点赞一次
+    __table_args__ = (
+        db.UniqueConstraint(
+            'event_id',
+            'user_id',
+            name='_event_user_like_uc'),
+        db.UniqueConstraint(
+            'event_group_id',
+            'user_id',
+            name='_event_group_user_like_uc'),
+    )
+
+
+# 事件参与者关联表（多对多关系）
+event_participants = db.Table('event_participants',
+                              db.Column(
+                                  'event_id',
+                                  db.Integer,
+                                  db.ForeignKey('shared_event.id'),
+                                  primary_key=True),
+                              db.Column(
+                                  'user_id',
+                                  db.Integer,
+                                  db.ForeignKey('user.id'),
+                                  primary_key=True),
+                              db.Column(
+                                  'joined_at', db.DateTime, default=datetime.now)
+                              )
+
+# 用户好友关联表（多对多关系）
+user_friends = db.Table('user_friends',
+                        db.Column(
+                            'user_id',
+                            db.Integer,
+                            db.ForeignKey('user.id'),
+                            primary_key=True),
+                        db.Column(
+                            'friend_id',
+                            db.Integer,
+                            db.ForeignKey('user.id'),
+                            primary_key=True),
+                        db.Column(
+                            'created_at', db.DateTime, default=datetime.now)
+                        )
+
+
 class GameLog(db.Model):
     """真实游戏日志模型"""
     id = db.Column(db.Integer, primary_key=True)
@@ -81,6 +191,8 @@ class GameLog(db.Model):
     world_name = db.Column(db.String(200))  # 世界名称
     world_id = db.Column(db.String(100))  # 世界ID，如#53949
     player_name = db.Column(db.String(80), nullable=False)  # 玩家名称
+    player_vrc_id = db.Column(db.String(100))  # VRChat唯一ID
+    player_is_registered = db.Column(db.Boolean, default=False)  # 是否为注册用户
     is_friend = db.Column(db.Boolean, default=False)  # 是否为好友
     created_at = db.Column(db.DateTime, default=datetime.now)  # 记录创建时间
 
@@ -688,7 +800,15 @@ def index():
 
     # 处理标签筛选
     selected_tag = request.args.get('tag')
-    query = SharedEvent.query.filter_by(user_id=current_user.id)
+
+    # 查询当前用户创建的事件或参与的事件
+    from sqlalchemy import or_
+    query = SharedEvent.query.filter(
+        or_(
+            SharedEvent.user_id == current_user.id,
+            SharedEvent.participants.contains(current_user)
+        )
+    )
     filtered_query = filter_events_by_tag(query, selected_tag)
 
     # 处理搜索
@@ -737,6 +857,28 @@ def index():
     # 按时间倒序获取事件
     events = filtered_query.order_by(SharedEvent.start_time.desc()).all()
 
+    # 为每个事件添加点赞数和当前用户的点赞状态
+    for event in events:
+        if event.event_group_id:
+            # 事件属于某个事件组，计算事件组的点赞数
+            event.like_count = EventLike.query.filter(
+                (EventLike.event_id == event.id) |
+                (EventLike.event_group_id == event.event_group_id)
+            ).count()
+            # 检查当前用户是否点赞了该事件或事件组
+            event.is_liked_by_current_user = EventLike.query.filter(
+                ((EventLike.event_id == event.id) |
+                 (EventLike.event_group_id == event.event_group_id)) &
+                (EventLike.user_id == current_user.id)
+            ).first() is not None
+        else:
+            # 事件不属于任何事件组，计算单个事件的点赞数
+            event.like_count = EventLike.query.filter_by(
+                event_id=event.id).count()
+            # 检查当前用户是否点赞
+            event.is_liked_by_current_user = EventLike.query.filter_by(
+                event_id=event.id, user_id=current_user.id).first() is not None
+
     return render_template(
         'index.html',
         events=events,
@@ -751,6 +893,27 @@ def index():
 def event_detail(event_id):
     """事件详情页面"""
     event = SharedEvent.query.get_or_404(event_id)
+
+    # 计算点赞数
+    if event.event_group_id:
+        # 事件属于某个事件组，计算事件组的点赞数
+        event.like_count = EventLike.query.filter(
+            (EventLike.event_id == event.id) |
+            (EventLike.event_group_id == event.event_group_id)
+        ).count()
+        # 检查当前用户是否点赞了该事件或事件组
+        event.is_liked_by_current_user = EventLike.query.filter(
+            ((EventLike.event_id == event.id) |
+             (EventLike.event_group_id == event.event_group_id)) &
+            (EventLike.user_id == current_user.id)
+        ).first() is not None
+    else:
+        # 事件不属于任何事件组，计算单个事件的点赞数
+        event.like_count = EventLike.query.filter_by(event_id=event.id).count()
+        # 检查当前用户是否点赞
+        event.is_liked_by_current_user = EventLike.query.filter_by(
+            event_id=event.id, user_id=current_user.id).first() is not None
+
     return render_template('event_detail.html', event=event)
 
 
@@ -823,8 +986,51 @@ def like_event(event_id):
 
     # 使用API错误处理包装的数据库操作
     def like_event_operation():
-        event.likes += 1  # 增加点赞数
-        return event.likes
+        # 检查用户是否已经点赞了该事件或事件组
+        if event.event_group_id:
+            # 检查是否已经点赞了事件或事件组
+            existing_like = EventLike.query.filter(
+                ((EventLike.event_id == event_id) |
+                 (EventLike.event_group_id == event.event_group_id)) &
+                (EventLike.user_id == current_user.id)
+            ).first()
+            if existing_like:
+                # 用户已经点赞，返回当前点赞数
+                like_count = EventLike.query.filter(
+                    (EventLike.event_id == event_id) |
+                    (EventLike.event_group_id == event.event_group_id)
+                ).count()
+                return like_count
+
+            # 创建新的点赞记录，关联到事件组
+            new_like = EventLike(
+                event_group_id=event.event_group_id,
+                user_id=current_user.id
+            )
+        else:
+            # 检查是否已经点赞了事件
+            existing_like = EventLike.query.filter_by(
+                event_id=event_id, user_id=current_user.id).first()
+            if existing_like:
+                # 用户已经点赞，返回当前点赞数
+                like_count = EventLike.query.filter_by(
+                    event_id=event_id).count()
+                return like_count
+
+            # 创建新的点赞记录，关联到事件
+            new_like = EventLike(event_id=event_id, user_id=current_user.id)
+
+        db.session.add(new_like)
+
+        # 计算点赞数
+        if event.event_group_id:
+            like_count = EventLike.query.filter(
+                (EventLike.event_id == event_id) |
+                (EventLike.event_group_id == event.event_group_id)
+            ).count()
+        else:
+            like_count = EventLike.query.filter_by(event_id=event_id).count()
+        return like_count
 
     # 成功响应函数
     def success_response(likes):
@@ -833,6 +1039,113 @@ def like_event(event_id):
     # 调用API错误处理函数
     return handle_api_db_operation(
         operation_func=like_event_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/event/<int:event_id>/like/status', methods=['GET'])
+@login_required
+def get_like_status(event_id):
+    """检查用户是否已经点赞了某个事件"""
+    event = SharedEvent.query.get_or_404(event_id)
+
+    # 使用API错误处理包装的数据库操作
+    def get_like_status_operation():
+        if event.event_group_id:
+            # 检查是否已经点赞了事件或事件组
+            existing_like = EventLike.query.filter(
+                ((EventLike.event_id == event_id) |
+                 (EventLike.event_group_id == event.event_group_id)) &
+                (EventLike.user_id == current_user.id)
+            ).first()
+            is_liked = existing_like is not None
+
+            # 计算事件组的点赞数
+            like_count = EventLike.query.filter(
+                (EventLike.event_id == event_id) |
+                (EventLike.event_group_id == event.event_group_id)
+            ).count()
+        else:
+            # 检查是否已经点赞了事件
+            existing_like = EventLike.query.filter_by(
+                event_id=event_id, user_id=current_user.id).first()
+            is_liked = existing_like is not None
+
+            # 计算事件的点赞数
+            like_count = EventLike.query.filter_by(event_id=event_id).count()
+
+        return {
+            'is_liked': is_liked,
+            'likes': like_count
+        }
+
+    # 成功响应函数
+    def success_response(result):
+        return jsonify(
+            {'success': True, 'is_liked': result['is_liked'], 'likes': result['likes']})
+
+    # 调用API错误处理函数
+    return handle_api_db_operation(
+        operation_func=get_like_status_operation,
+        success_response_func=success_response
+    )
+
+
+@app.route('/api/event/<int:event_id>/like', methods=['DELETE'])
+@login_required
+def unlike_event(event_id):
+    """取消点赞功能"""
+    event = SharedEvent.query.get_or_404(event_id)
+
+    # 使用API错误处理包装的数据库操作
+    def unlike_event_operation():
+        if event.event_group_id:
+            # 查找点赞记录（事件或事件组）
+            existing_like = EventLike.query.filter(
+                ((EventLike.event_id == event_id) |
+                 (EventLike.event_group_id == event.event_group_id)) &
+                (EventLike.user_id == current_user.id)
+            ).first()
+            if not existing_like:
+                # 用户没有点赞，返回当前点赞数
+                like_count = EventLike.query.filter(
+                    (EventLike.event_id == event_id) |
+                    (EventLike.event_group_id == event.event_group_id)
+                ).count()
+                return like_count
+
+            # 删除点赞记录
+            db.session.delete(existing_like)
+
+            # 计算点赞数
+            like_count = EventLike.query.filter(
+                (EventLike.event_id == event_id) |
+                (EventLike.event_group_id == event.event_group_id)
+            ).count()
+        else:
+            # 查找点赞记录
+            existing_like = EventLike.query.filter_by(
+                event_id=event_id, user_id=current_user.id).first()
+            if not existing_like:
+                # 用户没有点赞，返回当前点赞数
+                like_count = EventLike.query.filter_by(
+                    event_id=event_id).count()
+                return like_count
+
+            # 删除点赞记录
+            db.session.delete(existing_like)
+
+            # 计算点赞数
+            like_count = EventLike.query.filter_by(event_id=event_id).count()
+        return like_count
+
+    # 成功响应函数
+    def success_response(likes):
+        return jsonify({'success': True, 'likes': likes})
+
+    # 调用API错误处理函数
+    return handle_api_db_operation(
+        operation_func=unlike_event_operation,
         success_response_func=success_response
     )
 
@@ -1164,6 +1477,126 @@ def import_game_logs():
     )
 
 
+def find_matching_event_group(event):
+    """查找匹配的事件组
+    基于时间窗口、世界和参与者匹配
+    """
+    # 1. 获取当前事件的世界
+    world = event.world
+
+    # 2. 定义时间窗口（前后10分钟）
+    time_window = timedelta(minutes=10)
+    start_time_window = event.start_time - time_window
+    end_time_window = event.end_time + time_window
+
+    # 3. 查找同一世界、时间窗口内的事件组
+    # 先查找匹配的事件
+    matching_events = SharedEvent.query.filter(
+        SharedEvent.world_id == world.id,
+        SharedEvent.start_time.between(start_time_window, end_time_window),
+        SharedEvent.end_time.between(start_time_window, end_time_window),
+        SharedEvent.user_id != event.user_id,  # 排除当前用户的其他事件
+        SharedEvent.event_group_id.isnot(None)  # 已有事件组
+    ).all()
+
+    # 4. 如果找到匹配的事件，返回其事件组
+    for matching_event in matching_events:
+        # 检查参与者是否匹配
+        # 获取当前事件的参与者用户名
+        event_participants = [p.username for p in event.participants]
+        matching_participants = [
+            p.username for p in matching_event.participants]
+
+        # 检查是否有共同参与者
+        if set(event_participants).intersection(set(matching_participants)):
+            return matching_event.event_group
+
+        # 检查是否是互为好友的事件
+        if event.friend_name in matching_participants or matching_event.friend_name in event_participants:
+            return matching_event.event_group
+
+    # 5. 没有匹配的事件组，返回None
+    return None
+
+
+def match_events_to_groups():
+    """将所有事件匹配到合适的事件组"""
+    # 1. 获取所有事件
+    all_events = SharedEvent.query.all()
+
+    # 2. 重置所有事件的事件组ID
+    for event in all_events:
+        event.event_group_id = None
+    db.session.commit()
+
+    # 3. 构建事件间的匹配关系，使用事件ID作为键
+    event_matches = {}
+    event_id_map = {event.id: event for event in all_events}
+
+    for i, event1 in enumerate(all_events):
+        for event2 in all_events[i + 1:]:
+            # 跳过同一用户的事件
+            if event1.user_id == event2.user_id:
+                continue
+
+            # 检查世界是否相同
+            if event1.world_id != event2.world_id:
+                continue
+
+            # 检查时间重叠（只要有重叠就匹配）
+            # 两个事件有重叠的条件：event1的结束时间 >= event2的开始时间 且 event1的开始时间 <=
+            # event2.end_time
+            if not (event1.end_time >=
+                    event2.start_time and event1.start_time <= event2.end_time):
+                continue
+
+            # 检查参与者是否匹配
+            event1_participants = [p.username for p in event1.participants]
+            event2_participants = [p.username for p in event2.participants]
+
+            if set(event1_participants).intersection(set(event2_participants)) or \
+               event1.friend_name in event2_participants or \
+               event2.friend_name in event1_participants:
+                # 事件匹配，建立双向关系
+                if event1.id not in event_matches:
+                    event_matches[event1.id] = set()
+                if event2.id not in event_matches:
+                    event_matches[event2.id] = set()
+                event_matches[event1.id].add(event2.id)
+                event_matches[event2.id].add(event1.id)
+
+    # 4. 为匹配的事件创建事件组
+    processed_event_ids = set()
+
+    for event_id, match_ids in event_matches.items():
+        if event_id in processed_event_ids:
+            continue
+
+        # 创建新的事件组
+        event_group = EventGroup()
+        db.session.add(event_group)
+        db.session.flush()  # 立即获取事件组ID
+
+        # 将事件及其匹配项关联到事件组
+        group_event_ids = {event_id} | match_ids
+        for group_event_id in group_event_ids:
+            if group_event_id in event_id_map:
+                group_event = event_id_map[group_event_id]
+                group_event.event_group_id = event_group.id
+                processed_event_ids.add(group_event_id)
+
+    # 5. 为没有匹配项的事件创建单独的事件组
+    for event in all_events:
+        if event.id not in processed_event_ids:
+            event_group = EventGroup()
+            db.session.add(event_group)
+            db.session.flush()  # 立即获取事件组ID
+            event.event_group_id = event_group.id
+            processed_event_ids.add(event.id)
+
+    db.session.commit()
+
+
 @app.route('/api/gamelog/convert', methods=['POST'])
 @login_required
 def convert_game_logs():
@@ -1212,6 +1645,9 @@ def convert_game_logs():
                 )
                 db.session.add(event)
                 converted_count += 1
+
+        # 3. 将新创建的事件匹配到事件组
+        match_events_to_groups()
 
         return converted_count
 
@@ -1359,50 +1795,414 @@ def bulk_import_game_logs():
 # ------------------------------
 
 def generate_mock_data():
-    """生成模拟数据用于演示"""
-    # 创建示例世界
+    """生成固定预设数据用于演示
+
+    场景描述：
+    - 三个核心用户：alice（A）、bob（B）、charlie（C），加上demo用户
+    - 好友关系：alice↔bob，bob↔charlie（A和C不认识）
+    - 主要事件：三人在"The Black Cat"世界先后加入并互动
+    - 次要事件：bob和charlie在"Murder 4"世界的单独互动
+    """
+    print("正在生成固定预设数据...")
+
+    # 创建固定的世界
     worlds = [
         World(world_name="The Black Cat", tags="Social,Music,Dance"),
         World(world_name="Murder 4", tags="Game,Horror"),
-        World(world_name="Treehouse in the Shade", tags="Social,Relaxing"),
-        World(world_name="Just B Club", tags="Music,Dance"),
-        World(world_name="Among Us VR", tags="Game,Social")
+        World(world_name="Treehouse in the Shade", tags="Social,Relaxing")
     ]
 
-    # 保存世界数据
     for world in worlds:
         db.session.add(world)
     db.session.commit()
 
-    # 创建演示用户
-    demo_user = User(
-        username="demo",
-        password_hash=generate_password_hash("demo")  # 使用安全哈希
-    )
-    db.session.add(demo_user)
-    db.session.commit()
+    # 创建固定用户
+    users = {}
+    user_credentials = [
+        ("alice", "password123", "Alice"),
+        ("bob", "password123", "Bob"),
+        ("charlie", "password123", "Charlie"),
+        ("demo", "demo", "Demo")
+    ]
 
-    # 示例好友列表
-    friends = ["Alice", "Bob", "Charlie", "Diana"]
-
-    # 生成10个示例事件
-    for _ in range(10):
-        # 随机生成事件时间
-        start_time = datetime.now() - timedelta(days=random.randint(0, 30))
-        duration = random.randint(300, 7200)  # 5分钟到2小时
-        end_time = start_time + timedelta(seconds=duration)
-
-        # 创建事件
-        event = SharedEvent(
-            user_id=demo_user.id,
-            world_id=random.choice(worlds).id,
-            friend_name=random.choice(friends),
-            start_time=start_time,
-            end_time=end_time,
-            duration=duration
+    for username, password, display_name in user_credentials:
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password)
         )
-        db.session.add(event)
+        db.session.add(user)
+        users[username] = user
+
     db.session.commit()
+    print(f"已创建 {len(users)} 个用户")
+
+    # 建立固定的好友关系（双向）
+    # alice ↔ bob
+    users["alice"].friends.append(users["bob"])
+    users["bob"].friends.append(users["alice"])
+    # bob ↔ charlie
+    users["bob"].friends.append(users["charlie"])
+    users["charlie"].friends.append(users["bob"])
+
+    db.session.commit()
+    print("已建立好友关系：alice↔bob, bob↔charlie")
+
+    # 获取世界引用
+    black_cat = World.query.filter_by(world_name="The Black Cat").first()
+    murder_4 = World.query.filter_by(world_name="Murder 4").first()
+
+    # 固定时间设置：所有事件发生在最近一周内
+    base_time = datetime.now() - timedelta(days=3, hours=15)
+
+    # ==================== 主要场景：三人在"The Black Cat"世界互动 ====================
+    print("\n生成主要场景：三人在'The Black Cat'世界互动")
+
+    # 场景时间线：
+    # 1. alice加入世界 (14:00)
+    # 2. bob加入世界，与alice相遇 (14:10)
+    # 3. charlie加入世界，与bob相遇 (14:20)
+    # 4. 三人在世界内互动直到14:45
+    # 5. alice离开 (14:45)
+    # 6. bob和charlie继续互动直到15:30
+
+    # 1. alice的游戏日志
+    alice_logs = [
+        # alice加入世界
+        GameLog(
+            user_id=users["alice"].id,
+            timestamp=base_time.replace(hour=14, minute=0, second=0),
+            event_type="位置变动",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="alice",
+            is_friend=False  # 自己不是好友
+        ),
+        # bob加入，alice看到bob
+        GameLog(
+            user_id=users["alice"].id,
+            timestamp=base_time.replace(hour=14, minute=10, second=0),
+            event_type="玩家加入",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="bob",
+            is_friend=True  # bob是alice的好友
+        ),
+        # charlie加入，alice看到charlie（但charlie不是alice的好友）
+        GameLog(
+            user_id=users["alice"].id,
+            timestamp=base_time.replace(hour=14, minute=20, second=0),
+            event_type="玩家加入",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="charlie",
+            is_friend=False  # charlie不是alice的好友
+        ),
+        # alice离开世界
+        GameLog(
+            user_id=users["alice"].id,
+            timestamp=base_time.replace(hour=14, minute=45, second=0),
+            event_type="玩家离开",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="alice",
+            is_friend=False
+        )
+    ]
+
+    # 2. bob的游戏日志
+    bob_logs = [
+        # bob加入世界
+        GameLog(
+            user_id=users["bob"].id,
+            timestamp=base_time.replace(hour=14, minute=10, second=0),
+            event_type="位置变动",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="bob",
+            is_friend=False
+        ),
+        # bob看到alice（好友）
+        GameLog(
+            user_id=users["bob"].id,
+            timestamp=base_time.replace(hour=14, minute=10, second=5),
+            event_type="玩家加入",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="alice",
+            is_friend=True
+        ),
+        # bob看到charlie（好友）
+        GameLog(
+            user_id=users["bob"].id,
+            timestamp=base_time.replace(hour=14, minute=20, second=0),
+            event_type="玩家加入",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="charlie",
+            is_friend=True
+        ),
+        # bob看到alice离开
+        GameLog(
+            user_id=users["bob"].id,
+            timestamp=base_time.replace(hour=14, minute=45, second=0),
+            event_type="玩家离开",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="alice",
+            is_friend=True
+        ),
+        # bob离开世界
+        GameLog(
+            user_id=users["bob"].id,
+            timestamp=base_time.replace(hour=15, minute=30, second=0),
+            event_type="玩家离开",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="bob",
+            is_friend=False
+        )
+    ]
+
+    # 3. charlie的游戏日志
+    charlie_logs = [
+        # charlie加入世界
+        GameLog(
+            user_id=users["charlie"].id,
+            timestamp=base_time.replace(hour=14, minute=20, second=0),
+            event_type="位置变动",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="charlie",
+            is_friend=False
+        ),
+        # charlie看到bob（好友）
+        GameLog(
+            user_id=users["charlie"].id,
+            timestamp=base_time.replace(hour=14, minute=20, second=5),
+            event_type="玩家加入",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="bob",
+            is_friend=True
+        ),
+        # charlie看到alice（不是好友）
+        GameLog(
+            user_id=users["charlie"].id,
+            timestamp=base_time.replace(hour=14, minute=20, second=10),
+            event_type="玩家加入",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="alice",
+            is_friend=False
+        ),
+        # charlie看到alice离开
+        GameLog(
+            user_id=users["charlie"].id,
+            timestamp=base_time.replace(hour=14, minute=45, second=0),
+            event_type="玩家离开",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="alice",
+            is_friend=False
+        ),
+        # charlie离开世界
+        GameLog(
+            user_id=users["charlie"].id,
+            timestamp=base_time.replace(hour=15, minute=30, second=0),
+            event_type="玩家离开",
+            world_name="The Black Cat",
+            world_id="#12345",
+            player_name="charlie",
+            is_friend=False
+        )
+    ]
+
+    # 保存所有游戏日志
+    all_logs = alice_logs + bob_logs + charlie_logs
+    for log in all_logs:
+        db.session.add(log)
+
+    # 为demo用户添加一些示例日志
+    demo_logs = [
+        GameLog(
+            user_id=users["demo"].id,
+            timestamp=base_time.replace(hour=16, minute=0, second=0),
+            event_type="位置变动",
+            world_name="Treehouse in the Shade",
+            world_id="#54321",
+            player_name="demo",
+            is_friend=False
+        ),
+        GameLog(
+            user_id=users["demo"].id,
+            timestamp=base_time.replace(hour=16, minute=10, second=0),
+            event_type="玩家加入",
+            world_name="Treehouse in the Shade",
+            world_id="#54321",
+            player_name="Player_999",
+            is_friend=False  # 陌生人
+        )
+    ]
+
+    for log in demo_logs:
+        db.session.add(log)
+
+    db.session.commit()
+    print(f"已生成 {len(all_logs) + len(demo_logs)} 条游戏日志")
+
+    # ==================== 次要场景：bob和charlie在"Murder 4"世界 ====================
+    print("\n生成次要场景：bob和charlie在'Murder 4'世界")
+
+    murder_base_time = base_time + timedelta(days=1, hours=2)
+
+    # bob在Murder 4的日志
+    bob_murder_logs = [
+        GameLog(
+            user_id=users["bob"].id,
+            timestamp=murder_base_time.replace(hour=20, minute=0, second=0),
+            event_type="位置变动",
+            world_name="Murder 4",
+            world_id="#67890",
+            player_name="bob",
+            is_friend=False
+        ),
+        GameLog(
+            user_id=users["bob"].id,
+            timestamp=murder_base_time.replace(hour=20, minute=5, second=0),
+            event_type="玩家加入",
+            world_name="Murder 4",
+            world_id="#67890",
+            player_name="charlie",
+            is_friend=True
+        )
+    ]
+
+    # charlie在Murder 4的日志
+    charlie_murder_logs = [
+        GameLog(
+            user_id=users["charlie"].id,
+            timestamp=murder_base_time.replace(hour=20, minute=5, second=0),
+            event_type="位置变动",
+            world_name="Murder 4",
+            world_id="#67890",
+            player_name="charlie",
+            is_friend=False
+        ),
+        GameLog(
+            user_id=users["charlie"].id,
+            timestamp=murder_base_time.replace(hour=20, minute=5, second=5),
+            event_type="玩家加入",
+            world_name="Murder 4",
+            world_id="#67890",
+            player_name="bob",
+            is_friend=True
+        )
+    ]
+
+    for log in bob_murder_logs + charlie_murder_logs:
+        db.session.add(log)
+
+    db.session.commit()
+    print("已添加次要场景游戏日志")
+
+    # ==================== 从游戏日志生成共享事件 ====================
+    print("\n正在从游戏日志生成共享事件...")
+
+    # 事件1：alice和bob在The Black Cat的互动 (14:10 - 14:45)
+    event1 = SharedEvent(
+        user_id=users["alice"].id,
+        world_id=black_cat.id,
+        friend_name="bob",
+        start_time=base_time.replace(hour=14, minute=10, second=0),
+        end_time=base_time.replace(hour=14, minute=45, second=0),
+        duration=2100  # 35分钟
+    )
+    # 添加参与者：alice（创建者）和bob
+    event1.participants.append(users["alice"])
+    event1.participants.append(users["bob"])
+    db.session.add(event1)
+
+    # 事件2：bob和charlie在The Black Cat的互动 (14:20 - 15:30)
+    event2 = SharedEvent(
+        user_id=users["bob"].id,
+        world_id=black_cat.id,
+        friend_name="charlie",
+        start_time=base_time.replace(hour=14, minute=20, second=0),
+        end_time=base_time.replace(hour=15, minute=30, second=0),
+        duration=4200  # 70分钟
+    )
+    # 添加参与者：bob（创建者）和charlie
+    event2.participants.append(users["bob"])
+    event2.participants.append(users["charlie"])
+    db.session.add(event2)
+
+    # 事件3：bob和charlie在Murder 4的互动 (20:05 - 21:00)
+    event3 = SharedEvent(
+        user_id=users["bob"].id,
+        world_id=murder_4.id,
+        friend_name="charlie",
+        start_time=murder_base_time.replace(hour=20, minute=5, second=0),
+        end_time=murder_base_time.replace(hour=21, minute=0, second=0),
+        duration=3300  # 55分钟
+    )
+    # 添加参与者：bob（创建者）和charlie
+    event3.participants.append(users["bob"])
+    event3.participants.append(users["charlie"])
+    db.session.add(event3)
+
+    # 为demo用户添加一个示例事件
+    event4 = SharedEvent(
+        user_id=users["demo"].id,
+        world_id=black_cat.id,
+        friend_name="Player_999",
+        start_time=base_time.replace(hour=16, minute=10, second=0),
+        end_time=base_time.replace(hour=16, minute=40, second=0),
+        duration=1800  # 30分钟
+    )
+    # 只有demo参与者（与陌生人互动）
+    event4.participants.append(users["demo"])
+    db.session.add(event4)
+
+    db.session.commit()
+    print(f"已生成 4 个共享事件")
+    print("  - 事件1: alice和bob在The Black Cat (14:10-14:45)")
+    print("  - 事件2: bob和charlie在The Black Cat (14:20-15:30)")
+    print("  - 事件3: bob和charlie在Murder 4 (20:05-21:00)")
+    print("  - 事件4: demo和陌生人在The Black Cat (16:10-16:40)")
+
+    # ==================== 验证数据一致性 ====================
+    print("\n验证数据一致性...")
+
+    # 验证好友关系
+    alice_friends = [f.username for f in users["alice"].friends]
+    bob_friends = [f.username for f in users["bob"].friends]
+    charlie_friends = [f.username for f in users["charlie"].friends]
+
+    print(f"  alice的好友: {alice_friends} (应该包含bob)")
+    print(f"  bob的好友: {bob_friends} (应该包含alice和charlie)")
+    print(f"  charlie的好友: {charlie_friends} (应该包含bob)")
+
+    # 验证事件参与者
+    events = SharedEvent.query.all()
+    for i, event in enumerate(events, 1):
+        participants = [p.username for p in event.participants]
+        world = World.query.get(event.world_id)
+        print(
+            f"  事件{i}: 与{
+                event.friend_name}在{
+                world.world_name}, 参与者: {participants}")
+
+    print("\n固定预设数据生成完成！")
+    print("场景总结：")
+    print("  1. alice和bob是好友，在The Black Cat世界一起玩35分钟")
+    print("  2. bob和charlie是好友，在The Black Cat世界一起玩70分钟")
+    print("  3. bob和charlie是好友，在Murder 4世界一起玩55分钟")
+    print("  4. alice和charlie不是好友，没有共同事件")
+    print("  5. demo用户与陌生人互动")
+
+    # 为生成的事件匹配事件组
+    match_events_to_groups()
+    print("已为事件匹配事件组")
 
 
 # ------------------------------

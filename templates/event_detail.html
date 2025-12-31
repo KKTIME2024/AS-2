@@ -152,15 +152,17 @@
                 <!-- 点赞功能 -->
                 <section class="card shadow-sm mb-4" role="region" aria-labelledby="likes-heading">
                     <div class="card-body">
-                        <h2 id="likes-heading" class="card-title h5 mb-3">👍 点赞</h2>
-                        <button class="like-btn btn btn-outline-danger btn-lg" 
+                        <h2 id="likes-heading" class="card-title h5 mb-3">{% if event.is_liked_by_current_user %}❤️{% else %}👍{% endif %} 点赞</h2>
+                        <button class="like-btn btn btn-outline-danger btn-lg {% if event.is_liked_by_current_user %}btn-danger text-white{% endif %}" 
                                 data-event-id="{{ event.id }}"
-                                aria-label="为事件点赞，当前点赞数：{{ event.likes or 0 }}"
+                                data-liked="{{ 'true' if event.is_liked_by_current_user else 'false' }}"
+                                aria-label="{% if event.is_liked_by_current_user %}取消点赞{% else %}为事件点赞{% endif %}，当前点赞数：{{ event.like_count }}"
                                 aria-live="polite">
-                            👍 <span class="like-count">{{ event.likes or 0 }}</span>
+                            <span class="like-icon">{% if event.is_liked_by_current_user %}❤️{% else %}👍{% endif %}</span> 
+                            <span class="like-count">{{ event.like_count }}</span>
                         </button>
                         <p class="text-muted mt-2 small">
-                            点击按钮表达您对此事件的喜爱
+                            {% if event.is_liked_by_current_user %}您已经点赞了此事件，再次点击可取消点赞{% else %}点击按钮表达您对此事件的喜爱{% endif %}
                         </p>
                     </div>
                 </section>
@@ -246,10 +248,14 @@
                 btn.addEventListener('click', async function() {
                     const eventId = this.dataset.eventId;
                     const likeCountSpan = this.querySelector('.like-count');
+                    const likeIcon = this.querySelector('.like-icon');
+                    const isLiked = this.dataset.liked === 'true';
                     
                     try {
+                        // 确定请求方法和URL
+                        const method = isLiked ? 'DELETE' : 'POST';
                         const response = await fetch(`/api/event/${eventId}/like`, {
-                            method: 'POST',
+                            method: method,
                             headers: {
                                 'Content-Type': 'application/json'
                             }
@@ -257,10 +263,32 @@
                         
                         if (response.ok) {
                             const data = await response.json();
+                            // 更新点赞数
                             likeCountSpan.textContent = data.likes;
+                            
+                            // 更新按钮状态
+                            if (isLiked) {
+                                // 取消点赞
+                                this.classList.remove('btn-danger', 'text-white');
+                                this.classList.add('btn-outline-danger');
+                                likeIcon.textContent = '👍';
+                                this.dataset.liked = 'false';
+                                this.setAttribute('aria-label', `为事件点赞，当前点赞数：${data.likes}`);
+                                // 更新标题
+                                document.querySelector('#likes-heading').textContent = '👍 点赞';
+                            } else {
+                                // 点赞
+                                this.classList.remove('btn-outline-danger');
+                                this.classList.add('btn-danger', 'text-white');
+                                likeIcon.textContent = '❤️';
+                                this.dataset.liked = 'true';
+                                this.setAttribute('aria-label', `取消点赞，当前点赞数：${data.likes}`);
+                                // 更新标题
+                                document.querySelector('#likes-heading').textContent = '❤️ 点赞';
+                            }
                         }
                     } catch (error) {
-                        console.error('点赞失败:', error);
+                        console.error('点赞操作失败:', error);
                     }
                 });
             });
