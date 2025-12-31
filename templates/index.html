@@ -13,11 +13,12 @@
             <div class="row g-3">
                 <div class="col-md-10">
                     <div class="input-group">
+                        <label for="search-input" class="form-label visually-hidden">搜索</label>
                         <span class="input-group-text">
                             <span aria-hidden="true">🔎</span>
                             <span class="visually-hidden">搜索关键词</span>
                         </span>
-                        <input type="text" class="form-control form-control-lg" name="search" 
+                        <input type="text" id="search-input" class="form-control form-control-lg" name="search" 
                                placeholder="搜索好友名称、世界名称、标签或日期..." 
                                aria-describedby="search-help" 
                                value="{{ search_query or '' }}" 
@@ -47,7 +48,7 @@
     <section class="tag-filter-section mb-4" role="region" aria-labelledby="filter-heading">
         <h2 id="filter-heading" class="h5">按标签筛选</h2>
         <div class="filter-controls" role="toolbar" aria-label="标签筛选工具">
-            <div class="d-flex flex-wrap gap-2" role="list" aria-label="筛选标签列表">
+            <div class="d-flex flex-wrap gap-2" aria-label="筛选标签列表">
                 {% if selected_tag %}
                     <a href="{{ url_for('index') }}" class="btn btn-primary" role="button" 
                            aria-label="显示全部事件" aria-pressed="false">

@@ -418,7 +418,7 @@ function showKeyboardShortcutsHelp() {
         const helpHtml = `
             <div class="card">
                 <div class="card-header">
-                    <h5 class="card-title mb-0">键盘快捷键</h5>
+                    <h5 id="keyboard-shortcuts-title" class="card-title mb-0">键盘快捷键</h5>
                 </div>
                 <div class="card-body">
                     <dl class="row mb-0">
@@ -454,6 +454,10 @@ function showKeyboardShortcutsHelp() {
         modal.id = modalId;
         modal.className = 'modal fade';
         modal.tabIndex = -1;
+        modal.setAttribute('aria-labelledby', 'keyboard-shortcuts-title');
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-hidden', 'true');
         modal.innerHTML = `
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
