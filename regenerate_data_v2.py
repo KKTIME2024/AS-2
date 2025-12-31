@@ -245,92 +245,6 @@ def regenerate_mock_data():
     for log in party_logs:
         db.session.add(log)
 
-    # 生成共享事件 - 为每个互动生成双向记录
-    # alice和bob的互动 (19:15-21:30)
-    # alice创建的记录
-    event1 = SharedEvent(
-        user_id=users["alice"].id,
-        world_id=black_cat.id,
-        friend_name="bob",
-        start_time=join_times["bob"],
-        end_time=leave_times["bob"],
-        duration=int((leave_times["bob"] - join_times["bob"]).total_seconds())
-    )
-    event1.participants.append(users["alice"])
-    event1.participants.append(users["bob"])
-    db.session.add(event1)
-
-    # bob创建的记录
-    event1_bob = SharedEvent(
-        user_id=users["bob"].id,
-        world_id=black_cat.id,
-        friend_name="alice",
-        start_time=join_times["bob"],
-        end_time=leave_times["bob"],
-        duration=int((leave_times["bob"] - join_times["bob"]).total_seconds())
-    )
-    event1_bob.participants.append(users["bob"])
-    event1_bob.participants.append(users["alice"])
-    db.session.add(event1_bob)
-
-    # alice和charlie的互动 (19:30-22:00)
-    event2 = SharedEvent(
-        user_id=users["alice"].id,
-        world_id=black_cat.id,
-        friend_name="charlie",
-        start_time=join_times["charlie"],
-        end_time=leave_times["alice"],
-        duration=int((leave_times["alice"] -
-                      join_times["charlie"]).total_seconds())
-    )
-    event2.participants.append(users["alice"])
-    event2.participants.append(users["charlie"])
-    db.session.add(event2)
-
-    # charlie创建的记录
-    event2_charlie = SharedEvent(
-        user_id=users["charlie"].id,
-        world_id=black_cat.id,
-        friend_name="alice",
-        start_time=join_times["charlie"],
-        end_time=leave_times["alice"],
-        duration=int((leave_times["alice"] -
-                      join_times["charlie"]).total_seconds())
-    )
-    event2_charlie.participants.append(users["charlie"])
-    event2_charlie.participants.append(users["alice"])
-    db.session.add(event2_charlie)
-
-    # alice和emma的互动 (19:45-22:00)
-    event3 = SharedEvent(
-        user_id=users["alice"].id,
-        world_id=black_cat.id,
-        friend_name="emma",
-        start_time=join_times["emma"],
-        end_time=leave_times["alice"],
-        duration=int(
-            (leave_times["alice"] -
-             join_times["emma"]).total_seconds())
-    )
-    event3.participants.append(users["alice"])
-    event3.participants.append(users["emma"])
-    db.session.add(event3)
-
-    # emma创建的记录
-    event3_emma = SharedEvent(
-        user_id=users["emma"].id,
-        world_id=black_cat.id,
-        friend_name="alice",
-        start_time=join_times["emma"],
-        end_time=leave_times["alice"],
-        duration=int(
-            (leave_times["alice"] -
-             join_times["emma"]).total_seconds())
-    )
-    event3_emma.participants.append(users["emma"])
-    event3_emma.participants.append(users["alice"])
-    db.session.add(event3_emma)
-
     # ==================== 场景2：游戏组队 ====================
     print("\n生成场景2：游戏组队 (Starship Commander)")
     starship = world_dict["Starship Commander"]
@@ -357,18 +271,6 @@ def regenerate_mock_data():
 
     for log in game_logs:
         db.session.add(log)
-
-    # 生成共享事件
-    event4 = SharedEvent(
-        user_id=users["bob"].id,
-        world_id=starship.id,
-        friend_name="charlie",
-        start_time=game_start,
-        end_time=game_end,
-        duration=int((game_end - game_start).total_seconds())
-    )
-    event4.participants.extend(game_participants)
-    db.session.add(event4)
 
     # ==================== 场景3：单人加入已有朋友的世界 ====================
     print("\n生成场景3：单人加入已有朋友的世界 (Treehouse in the Shade)")
@@ -398,20 +300,6 @@ def regenerate_mock_data():
 
     for log in tree_logs:
         db.session.add(log)
-
-    # 生成共享事件
-    event5 = SharedEvent(
-        user_id=users["charlie"].id,
-        world_id=treehouse.id,
-        friend_name="david",
-        start_time=start_times["david"],
-        end_time=end_times["david"],
-        duration=int(
-            (end_times["david"] -
-             start_times["david"]).total_seconds())
-    )
-    event5.participants.extend(tree_participants)
-    db.session.add(event5)
 
     # ==================== 场景4：demo用户体验 ====================
     print("\n生成场景4：demo用户体验 (Cyberpunk Market)")
@@ -485,20 +373,6 @@ def regenerate_mock_data():
     for log in demo_logs:
         db.session.add(log)
 
-    # 生成共享事件
-    event6 = SharedEvent(
-        user_id=users["demo"].id,
-        world_id=cyberpunk.id,
-        friend_name="Stranger_123",
-        start_time=stranger_join_time,
-        end_time=stranger_leave_time,
-        duration=int(
-            (stranger_leave_time -
-             stranger_join_time).total_seconds())
-    )
-    event6.participants.append(users["demo"])
-    db.session.add(event6)
-
     # ==================== 场景5：双人游戏 ====================
     print("\n生成场景5：双人游戏 (Murder 4)")
     murder4 = world_dict["Murder 4"]
@@ -525,18 +399,6 @@ def regenerate_mock_data():
     for log in murder_logs:
         db.session.add(log)
 
-    # 生成共享事件
-    event7 = SharedEvent(
-        user_id=users["david"].id,
-        world_id=murder4.id,
-        friend_name="emma",
-        start_time=start_times["emma"],
-        end_time=end_times["emma"],
-        duration=int((end_times["emma"] - start_times["emma"]).total_seconds())
-    )
-    event7.participants.extend(game_participants)
-    db.session.add(event7)
-
     # ==================== 提交所有数据 ====================
     db.session.commit()
     print("\n模拟数据生成完成！")
@@ -555,20 +417,7 @@ def regenerate_mock_data():
             else:
                 print(f'  ✅ {user.username} ↔ {friend_name} 关系正常')
 
-    print("\n2. 事件验证：")
-    events = SharedEvent.query.all()
-    print(f'共生成 {len(events)} 个事件')
-    for i, event in enumerate(events, 1):
-        world = World.query.get(event.world_id)
-        participants = [p.username for p in event.participants]
-        print(
-            f'  事件{i}: {
-                event.friend_name} 在 {
-                world.world_name}, 时间: {
-                event.start_time.strftime("%m/%d %H:%M")}-{
-                    event.end_time.strftime("%H:%M")}, 参与者: {participants}')
-
-    print("\n3. 游戏日志验证：")
+    print("\n2. 游戏日志验证：")
     total_logs = GameLog.query.count()
     print(f'共生成 {total_logs} 条游戏日志')
 
@@ -576,6 +425,44 @@ def regenerate_mock_data():
     for user in users.values():
         user_logs = GameLog.query.filter_by(user_id=user.id).count()
         print(f'  {user.username}: {user_logs} 条日志')
+
+    # ==================== 从游戏日志生成共享事件 ====================
+    print("\n从游戏日志生成共享事件...")
+    from app import convert_game_logs
+    from flask import Flask
+    import sys
+    import os
+    from flask_login import login_user
+
+    # 模拟Flask请求上下文，以便调用convert_game_logs函数
+    for username, user in users.items():
+        print(f'\n为 {username} 生成共享事件...')
+
+        # 调用转换函数
+        try:
+            # 创建请求上下文
+            with app.test_request_context('/api/gamelog/convert', method='POST'):
+                # 设置当前用户
+                login_user(user)
+                # 调用转换函数
+                result = convert_game_logs()
+                print(f'  ✅ 为 {username} 生成了 {result} 个共享事件')
+        except Exception as e:
+            print(f'  ❌ 为 {username} 生成共享事件时出错: {e}')
+            import traceback
+            traceback.print_exc()
+
+    # 提交所有转换生成的事件
+    db.session.commit()
+
+    print("\n3. 事件验证：")
+    events = SharedEvent.query.all()
+    print(f'共生成 {len(events)} 个事件')
+    for i, event in enumerate(events, 1):
+        world = World.query.get(event.world_id)
+        participants = [p.username for p in event.participants]
+        print(
+            f'  事件{i}: {event.friend_name} 在 {world.world_name}, 时间: {event.start_time.strftime("%m/%d %H:%M")}-{event.end_time.strftime("%H:%M")}, 参与者: {participants}')
 
     # 为事件匹配事件组
     print("\n匹配事件组...")
