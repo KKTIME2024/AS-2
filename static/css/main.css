@@ -129,6 +129,8 @@ body {
 .form-control {
     border-radius: 8px;
     border: 1px solid #dee2e6;
+    color: #333333; /* Ensure proper text color for contrast */
+    background-color: #ffffff; /* Ensure proper background color */
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
