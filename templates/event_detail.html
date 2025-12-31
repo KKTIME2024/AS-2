@@ -8,8 +8,8 @@
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="{{ url_for('index') }}">时间线</a></li>
                     <li class="breadcrumb-item active" aria-current="page">
-                        与 {{ event.friend_name }} 在 {{ event.world.world_name }}
-                    </li>
+                            与 {{ event.friend_name|trim }} 在 {{ event.world.world_name }}
+                        </li>
                 </ol>
             </nav>
         </header>

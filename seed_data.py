@@ -334,7 +334,7 @@ def seed_database():
                                     event = SharedEvent(
                                         user_id=user.id,
                                         world_id=world.id,
-                                        friend_name=player_name,
+                                        friend_name=player_name.strip(),
                                         start_time=player_info['start_time'],
                                         end_time=log.timestamp,
                                         duration=duration
@@ -400,7 +400,7 @@ def seed_database():
                                             event = SharedEvent(
                                                 user_id=user.id,
                                                 world_id=world.id,
-                                                friend_name=other_player_name,
+                                                friend_name=other_player_name.strip(),
                                                 start_time=overlap_start,
                                                 end_time=overlap_end,
                                                 duration=duration

@@ -185,14 +185,14 @@
                                             与 
                                             {% for participant in event.participants %}
                                                 {% if participant.username != current_user.username %}
-                                                    <span class="friend-name">{{ participant.username }}</span>
+                                                    <span class="friend-name">{{ participant.username|trim }}</span>
                                                     {% if not loop.last %}, {% endif %}
                                                 {% endif %}
                                             {% endfor %}
                                             在 <span class="world-name">{{ event.world.world_name }}</span>
                                         {% else %}
                                             <!-- 正常显示 -->
-                                            与 <span class="friend-name">{{ event.friend_name }}</span> 
+                                            与 <span class="friend-name">{{ event.friend_name|trim }}</span> 
                                             在 <span class="world-name">{{ event.world.world_name }}</span>
                                         {% endif %}
                                     </h3>

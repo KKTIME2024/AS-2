@@ -1534,7 +1534,7 @@ def get_friends_feed():
                 if event:
                     target_info = {
                         'id': event.id,
-                        'title': f"与 {event.friend_name} 在 {event.world.world_name}",
+                        'title': f"与 {event.friend_name.strip()} 在 {event.world.world_name}",
                         'world_name': event.world.world_name,
                         'friend_name': event.friend_name
                     }
@@ -1728,7 +1728,7 @@ def get_timeline_data():
         for event in events:
             timeline_data.append({
                 'id': event.id,
-                'title': f"与 {event.friend_name} 在 {event.world.world_name}",
+                'title': f"与 {event.friend_name.strip()} 在 {event.world.world_name}",
                 'start': event.start_time.isoformat(),
                 'end': event.end_time.isoformat() if event.end_time else None,
                 'duration': event.duration,
@@ -1788,14 +1788,14 @@ def get_event_connections():
                         connection = {
                             'event1': {
                                 'id': event1.id,
-                                'title': f"与 {event1.friend_name} 在 {event1.world.world_name}",
+                                'title': f"与 {event1.friend_name.strip()} 在 {event1.world.world_name}",
                                 'start_time': event1.start_time.isoformat(),
                                 'end_time': event1.end_time.isoformat() if event1.end_time else None,
                                 'user_id': event1.user_id
                             },
                             'event2': {
                                 'id': event2.id,
-                                'title': f"与 {event2.friend_name} 在 {event2.world.world_name}",
+                                'title': f"与 {event2.friend_name.strip()} 在 {event2.world.world_name}",
                                 'start_time': event2.start_time.isoformat(),
                                 'end_time': event2.end_time.isoformat() if event2.end_time else None,
                                 'user_id': event2.user_id
@@ -1811,7 +1811,7 @@ def get_event_connections():
                     'group_id': group_id,
                     'events': [{
                         'id': event.id,
-                        'title': f"与 {event.friend_name} 在 {event.world.world_name}",
+                        'title': f"与 {event.friend_name.strip()} 在 {event.world.world_name}",
                         'start_time': event.start_time.isoformat(),
                         'end_time': event.end_time.isoformat() if event.end_time else None,
                         'user_id': event.user_id,
