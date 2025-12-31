@@ -796,9 +796,10 @@ def enhance_search_conditions(keywords):
     for keyword in keywords:
         keyword_like = f'%{keyword}%'
 
-        # 基本搜索条件
+        # 基本搜索条件 - 同时搜索friend_name和participants.username
         conditions = [
             SharedEvent.friend_name.ilike(keyword_like),
+            User.username.ilike(keyword_like),  # 搜索参与事件的好友用户名
             World.world_name.ilike(keyword_like),
             World.tags.ilike(keyword_like),
             EventTag.tag_name.ilike(keyword_like)
@@ -808,16 +809,19 @@ def enhance_search_conditions(keywords):
         if len(keyword) > 1:
             # 前缀匹配
             conditions.append(SharedEvent.friend_name.ilike(f'{keyword}%'))
+            conditions.append(User.username.ilike(f'{keyword}%'))  # 前缀匹配好友用户名
             conditions.append(World.world_name.ilike(f'{keyword}%'))
 
             # 后缀匹配
             conditions.append(SharedEvent.friend_name.ilike(f'%{keyword}'))
+            conditions.append(User.username.ilike(f'%{keyword}'))  # 后缀匹配好友用户名
             conditions.append(World.world_name.ilike(f'%{keyword}'))
 
         if len(keyword) > 2:
             # 子串匹配
             conditions.append(
                 SharedEvent.friend_name.ilike(f'%{keyword[:2]}%'))
+            conditions.append(User.username.ilike(f'%{keyword[:2]}%'))  # 子串匹配好友用户名
             conditions.append(World.world_name.ilike(f'%{keyword[:2]}%'))
 
             # 对于长度大于3的关键词，使用多个子串匹配
@@ -825,9 +829,11 @@ def enhance_search_conditions(keywords):
                 # 取前3个字符和后3个字符
                 conditions.append(
                     SharedEvent.friend_name.ilike(f'%{keyword[:3]}%'))
+                conditions.append(User.username.ilike(f'%{keyword[:3]}%'))  # 前3个字符匹配好友用户名
                 conditions.append(World.world_name.ilike(f'%{keyword[:3]}%'))
                 conditions.append(
                     SharedEvent.friend_name.ilike(f'%{keyword[-3:]}%'))
+                conditions.append(User.username.ilike(f'%{keyword[-3:]}%'))  # 后3个字符匹配好友用户名
                 conditions.append(World.world_name.ilike(f'%{keyword[-3:]}%'))
 
         search_conditions.append(or_(*conditions))
@@ -881,8 +887,9 @@ def index():
             # 连接表并应用搜索条件
             filtered_query = filtered_query.join(World)
             filtered_query = filtered_query.outerjoin(EventTag)
-            # 多个关键词之间使用AND连接，确保所有关键词都匹配
-            filtered_query = filtered_query.filter(and_(*search_conditions))
+            filtered_query = filtered_query.outerjoin(SharedEvent.participants)  # 连接参与用户表
+            # 多个关键词之间使用OR连接，更符合用户搜索习惯
+            filtered_query = filtered_query.filter(or_(*search_conditions))
             filtered_query = filtered_query.distinct()  # 正确去重
 
     # 处理日期范围
