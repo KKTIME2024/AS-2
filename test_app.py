@@ -18,9 +18,10 @@ class TestVRChatMemories(unittest.TestCase):
 
         with app.app_context():
             db.create_all()
-            
+
             # 创建测试用户，使用正确的密码哈希
-            test_user = User(username='testuser', password_hash=generate_password_hash('password'))
+            test_user = User(username='testuser',
+                             password_hash=generate_password_hash('password'))
             db.session.add(test_user)
             db.session.commit()
             self.test_user_id = test_user.id

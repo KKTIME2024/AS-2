@@ -6,9 +6,14 @@ A simple web application to record and share your VRChat memories with friends.
 
 - 📝 **Event Tracking**: Records VRChat shared room events with friends
 - 🏷️ **Tag System**: World tags and custom user tags for events
-- 👍 **AJAX Likes**: Like events without page refresh
+- 💬 **AJAX Comments**: Comment on events without page refresh
 - 🔐 **User Authentication**: Secure login/register system
 - 📱 **Responsive Design**: Works on all devices
+- 📊 **Statistics**: View event statistics and analytics
+- 📈 **Visualization**: Interactive data visualization
+- 📤 **Event Export**: Export events in CSV and JSON formats
+- 🔍 **Advanced Search**: Powerful search with date parsing
+- 👥 **Friend Activity Feed**: See friends' activities
 
 ## Technology Stack
 

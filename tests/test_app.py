@@ -73,37 +73,7 @@ def test_index_unauthenticated(client):
     assert '/login' in response.location
 
 
-def test_like_event(authenticated_client):
-    """测试点赞功能"""
-    event_id = None
 
-    # 创建测试数据
-    with app.app_context():
-        user = User.query.filter_by(username='testuser').first()
-        world = World(world_name="Test World")
-        db.session.add(world)
-        db.session.commit()
-
-        event = SharedEvent(
-            user_id=user.id,
-            world_id=world.id,
-            friend_name="Test Friend",
-            start_time=datetime.now(),
-            end_time=datetime.now() + timedelta(hours=1),
-            duration=3600  # 1小时
-        )
-        db.session.add(event)
-        db.session.commit()
-        event_id = event.id
-
-    # 测试点赞API
-    response = authenticated_client.post(f'/api/event/{event_id}/like')
-    assert response.status_code == 200
-
-    # 验证点赞数增加
-    with app.app_context():
-        updated_event = SharedEvent.query.get(event_id)
-        assert updated_event.likes == 1
 
 
 def test_add_tag(authenticated_client):
