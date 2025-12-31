@@ -322,26 +322,35 @@ def seed_database():
                                 
                                 world = get_or_create_world(world_sessions[world_key]['world_name'], '')
                                 
-                                event = SharedEvent(
-                                    user_id=user.id,
-                                    world_id=world.id,
-                                    friend_name=player_name,
-                                    start_time=player_info['start_time'],
-                                    end_time=log.timestamp,
-                                    duration=duration
-                                )
+                                # 检查是否已存在相同事件（基于参与者、世界和时间范围）
+                                existing_event = SharedEvent.query.filter(
+                                    SharedEvent.world_id == world.id,
+                                    SharedEvent.start_time == player_info['start_time'],
+                                    SharedEvent.end_time == log.timestamp
+                                ).first()
                                 
-                                event.participants.append(user)
-                                if player_name in username_to_user:
-                                    other_user = username_to_user[player_name]
-                                    event.participants.append(other_user)
+                                # 如果没有相同事件，则创建新事件
+                                if not existing_event:
+                                    event = SharedEvent(
+                                        user_id=user.id,
+                                        world_id=world.id,
+                                        friend_name=player_name,
+                                        start_time=player_info['start_time'],
+                                        end_time=log.timestamp,
+                                        duration=duration
+                                    )
                                     
-                                    if player_info['is_friend'] and other_user not in user.friends:
-                                        user.friends.append(other_user)
-                                        other_user.friends.append(user)
-                                
-                                db.session.add(event)
-                                converted_count += 1
+                                    event.participants.append(user)
+                                    if player_name in username_to_user:
+                                        other_user = username_to_user[player_name]
+                                        event.participants.append(other_user)
+                                        
+                                        if player_info['is_friend'] and other_user not in user.friends:
+                                            user.friends.append(other_user)
+                                            other_user.friends.append(user)
+                                    
+                                    db.session.add(event)
+                                    converted_count += 1
                         else:
                             if world_key in world_sessions and player_name in world_sessions[world_key]['players']:
                                 world_sessions[world_key]['players'].pop(player_name)
@@ -379,26 +388,35 @@ def seed_database():
                                         
                                         world = get_or_create_world(session['world_name'], '')
                                         
-                                        event = SharedEvent(
-                                            user_id=user.id,
-                                            world_id=world.id,
-                                            friend_name=other_player_name,
-                                            start_time=overlap_start,
-                                            end_time=overlap_end,
-                                            duration=duration
-                                        )
+                                        # 检查是否已存在相同事件（基于参与者、世界和时间范围）
+                                        existing_event = SharedEvent.query.filter(
+                                            SharedEvent.world_id == world.id,
+                                            SharedEvent.start_time == overlap_start,
+                                            SharedEvent.end_time == overlap_end
+                                        ).first()
                                         
-                                        event.participants.append(user)
-                                        if other_player_name in username_to_user:
-                                            other_user = username_to_user[other_player_name]
-                                            event.participants.append(other_user)
+                                        # 如果没有相同事件，则创建新事件
+                                        if not existing_event:
+                                            event = SharedEvent(
+                                                user_id=user.id,
+                                                world_id=world.id,
+                                                friend_name=other_player_name,
+                                                start_time=overlap_start,
+                                                end_time=overlap_end,
+                                                duration=duration
+                                            )
                                             
-                                            if other_player_info['is_friend'] and other_user not in user.friends:
-                                                user.friends.append(other_user)
-                                                other_user.friends.append(user)
-                                        
-                                        db.session.add(event)
-                                        converted_count += 1
+                                            event.participants.append(user)
+                                            if other_player_name in username_to_user:
+                                                other_user = username_to_user[other_player_name]
+                                                event.participants.append(other_user)
+                                                
+                                                if other_player_info['is_friend'] and other_user not in user.friends:
+                                                    user.friends.append(other_user)
+                                                    other_user.friends.append(user)
+                                            
+                                            db.session.add(event)
+                                            converted_count += 1
                 
                 return converted_count
             
@@ -462,15 +480,24 @@ def seed_database():
                 for i in range(min(3, len(test_comments))):
                     user = users[list(users.keys())[(comment_count) % len(users)]]
                     
-                    comment = EventComment(
-                        event_id=event.id,
-                        user_id=user.id,
-                        content=test_comments[i],
-                        created_at=datetime.now()
-                    )
+                    # 检查是否已存在相同评论（基于事件ID、用户ID和内容）
+                    existing_comment = EventComment.query.filter(
+                        EventComment.event_id == event.id,
+                        EventComment.user_id == user.id,
+                        EventComment.content == test_comments[i]
+                    ).first()
                     
-                    db.session.add(comment)
-                    comment_count += 1
+                    # 如果没有相同评论，则创建新评论
+                    if not existing_comment:
+                        comment = EventComment(
+                            event_id=event.id,
+                            user_id=user.id,
+                            content=test_comments[i],
+                            created_at=datetime.now()
+                        )
+                        
+                        db.session.add(comment)
+                        comment_count += 1
                 
                 test_comments = test_comments[min(3, len(test_comments)):]
                 if not test_comments:

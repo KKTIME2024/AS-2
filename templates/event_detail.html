@@ -311,9 +311,7 @@
                             回复
                         </button>
                     </div>
-                    <div class="replies mt-3 ms-4 border-start ps-3" id="replies-${comment.id}">
-                        ${comment.replies.map(renderComment).join('')}
-                    </div>
+                    <div class="replies mt-3 ms-4 border-start ps-3" id="replies-${comment.id}"></div>
                     <div class="reply-form mt-3 d-none" id="reply-form-${comment.id}">
                         <textarea class="form-control reply-content" rows="2" placeholder="回复..."></textarea>
                         <div class="d-flex gap-2 mt-2">
@@ -322,6 +320,16 @@
                         </div>
                     </div>
                 `;
+                
+                // 单独处理回复渲染，避免DOM元素转换为字符串
+                const repliesContainer = commentDiv.querySelector(`#replies-${comment.id}`);
+                if (comment.replies && comment.replies.length > 0) {
+                    comment.replies.forEach(reply => {
+                        const replyElement = renderComment(reply);
+                        repliesContainer.appendChild(replyElement);
+                    });
+                }
+                
                 return commentDiv;
             }
             
