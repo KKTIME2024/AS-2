@@ -176,7 +176,13 @@
             <div class="row" role="list" aria-label="共同房间事件列表">
                 {% for event in events %}
                     <div class="col-lg-12" role="listitem">
-                        <article class="card event-card shadow-sm">
+                        <article class="card event-card shadow-sm position-relative">
+                            <!-- 未读通知小红点 -->
+                            {% if event_has_unread_notifications.get(event.id, false) %}
+                                <span class="position-absolute top-2 end-2 badge rounded-circle bg-danger p-1" style="width: 12px; height: 12px; z-index: 10;" aria-label="新消息通知">
+                                    <span class="visually-hidden">新消息</span>
+                                </span>
+                            {% endif %}
                             <div class="card-body">
                                 <header class="card-header">
                                     <h3 class="card-title h5">

@@ -276,8 +276,9 @@
             // 评论功能脚本
             // ------------------------------
             
-            // 获取当前事件ID
+            // 获取当前事件ID和当前用户ID
             const eventId = {{ event.id }};
+            const currentUserId = {{ current_user.id if current_user.is_authenticated else 0 }};
             
             // 格式化日期
             function formatDate(dateString) {
@@ -295,15 +296,21 @@
             function renderComment(comment) {
                 const commentDiv = document.createElement('div');
                 commentDiv.className = 'comment mb-3 p-3 border rounded';
+                
+                // 只对评论所有者显示删除按钮
+                const deleteButton = comment.user.id === currentUserId ? `
+                    <button class="delete-comment-btn btn btn-sm btn-danger" data-comment-id="${comment.id}" aria-label="删除评论">
+                        删除
+                    </button>
+                ` : '';
+                
                 commentDiv.innerHTML = `
                     <div class="d-flex justify-content-between align-items-start">
                         <div class="comment-header">
                             <span class="comment-username fw-bold">${comment.user.username}</span>
                             <span class="comment-date text-muted small ms-2">${formatDate(comment.created_at)}</span>
                         </div>
-                        <button class="delete-comment-btn btn btn-sm btn-danger" data-comment-id="${comment.id}" aria-label="删除评论">
-                            删除
-                        </button>
+                        ${deleteButton}
                     </div>
                     <div class="comment-content mt-2">${comment.content}</div>
                     <div class="comment-actions mt-2">

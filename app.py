@@ -39,6 +39,11 @@ class User(UserMixin, db.Model):
         backref=db.backref('friended_by', lazy='dynamic'),
         lazy='dynamic'
     )
+    
+    @property
+    def unread_notifications_count(self):
+        """获取未读通知数量"""
+        return len([n for n in self.notifications if not n.is_read])
 
 
 class World(db.Model):
@@ -197,6 +202,28 @@ class ActivityFeed(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     user = db.relationship('User', backref='activities')
+
+
+class Notification(db.Model):
+    """通知模型，用于跟踪未读评论"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'user.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    comment_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'event_comment.id',
+            ondelete='CASCADE'),
+        nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    user = db.relationship('User', backref='notifications')
+    comment = db.relationship('EventComment', backref='notifications')
 
 
 class GameLog(db.Model):
@@ -908,12 +935,30 @@ def index():
     # 按时间倒序获取事件
     events = filtered_query.order_by(SharedEvent.start_time.desc()).all()
 
+    # 为每个事件检查是否有未读通知
+    event_has_unread_notifications = {}
+    if current_user.is_authenticated:
+        for event in events:
+            # 获取事件的所有评论ID
+            comment_ids = [comment.id for comment in event.comments]
+            if comment_ids:
+                # 检查是否有未读通知
+                has_unread = Notification.query.filter(
+                    Notification.user_id == current_user.id,
+                    Notification.comment_id.in_(comment_ids),
+                    Notification.is_read == False
+                ).count() > 0
+                event_has_unread_notifications[event.id] = has_unread
+            else:
+                event_has_unread_notifications[event.id] = False
+
     return render_template(
         'index.html',
         events=events,
         all_tags=all_unique_tags,
         selected_tag=selected_tag,
-        search_query=search_query
+        search_query=search_query,
+        event_has_unread_notifications=event_has_unread_notifications
     )
 
 
@@ -922,6 +967,27 @@ def index():
 def event_detail(event_id):
     """事件详情页面"""
     event = SharedEvent.query.get_or_404(event_id)
+    
+    # 将当前事件相关的通知标记为已读
+    if current_user.is_authenticated:
+        # 获取当前事件的所有评论ID
+        event_comments = EventComment.query.filter_by(event_id=event_id).all()
+        comment_ids = [comment.id for comment in event_comments]
+        
+        if comment_ids:
+            # 查找需要标记为已读的通知
+            notifications = Notification.query.filter(
+                Notification.user_id == current_user.id,
+                Notification.comment_id.in_(comment_ids),
+                Notification.is_read == False
+            ).all()
+            
+            # 直接更新每个通知对象
+            for notification in notifications:
+                notification.is_read = True
+            
+            # 提交更改
+            db.session.commit()
 
     return render_template('event_detail.html', event=event)
 
@@ -1112,6 +1178,32 @@ def create_comment(event_id):
         # 执行同步逻辑
         sync_related_events()
         
+        # 生成通知：为事件相关用户发送新评论通知
+        # 获取事件的所有参与者
+        participants = db.session.query(User).join(
+            event_participants, event_participants.c.user_id == User.id
+        ).filter(event_participants.c.event_id == event_id).all()
+        
+        # 为所有参与者（除了评论作者）生成通知
+        for participant in participants:
+            if participant.id != current_user.id:
+                notification = Notification(
+                    user_id=participant.id,
+                    comment_id=new_comment.id
+                )
+                db.session.add(notification)
+        
+        # 同时为事件的所有者生成通知（如果所有者不是评论作者且不在参与者列表中）
+        if event.user_id != current_user.id:
+            # 检查事件所有者是否已经在参与者列表中
+            owner_in_participants = any(p.id == event.user_id for p in participants)
+            if not owner_in_participants:
+                notification = Notification(
+                    user_id=event.user_id,
+                    comment_id=new_comment.id
+                )
+                db.session.add(notification)
+        
         return new_comment
 
     def success_response(comment):
@@ -1148,6 +1240,8 @@ def delete_comment(event_id, comment_id):
         return jsonify({'success': False, 'error': '无权限删除此评论'}), 403
 
     def delete_comment_operation():
+        # 在删除评论之前，先删除相关的通知记录
+        Notification.query.filter_by(comment_id=comment.id).delete()
         db.session.delete(comment)
         return {'success': True}
 
